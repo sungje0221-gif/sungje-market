@@ -1,10 +1,6 @@
-# Sungje Market Command Center Pro v3.1
+# Sungje Market Command Center Pro v4
 
-Personal investment decision dashboard built with Streamlit.
+Complete personal investment dashboard.
 
-## Run locally
-
-```bash
-pip install -r requirements.txt
-streamlit run app.py
-```
+## Deploy
+Upload all files and folders to GitHub and deploy `app.py` in Streamlit Community Cloud.

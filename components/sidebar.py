@@ -1,29 +1,29 @@
 import streamlit as st
 
-def render_sidebar() -> str:
+def render_sidebar():
     with st.sidebar:
-        st.markdown("## 📈 Sungje Market")
-        st.caption("Command Center Pro v3.1")
+        st.markdown("## 📈 SUNGJE")
+        st.caption("MARKET COMMAND CENTER")
         st.divider()
-
         page = st.radio(
             "Navigation",
             [
                 "Command Center",
+                "Market Overview",
                 "Watchlist",
                 "Portfolio",
                 "Buy Planner",
                 "Earnings",
-                "News",
+                "News & Briefing",
                 "Trading Journal",
+                "AI Analysis Engine",
                 "Settings",
             ],
             label_visibility="collapsed",
         )
-
         st.divider()
-        st.markdown("**Quick View**")
-        st.caption("US market · AI · Semi · Power")
-        st.caption("Yahoo Finance data")
-        st.caption("Quotes may be delayed.")
+        st.markdown("**Market Status**")
+        st.success("● DATA ONLINE")
+        st.caption("Yahoo Finance")
+        st.caption("Quotes may be delayed")
     return page

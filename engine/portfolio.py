@@ -1,13 +1,12 @@
 from engine.market_data import quote
-
-def enrich_portfolio(df):
-    if df.empty: return df.copy()
-    out = df.copy()
-    out["Current Price"] = [quote(str(t).upper())["price"] for t in out["Ticker"]]
-    out["Market Value"] = out["Shares"] * out["Current Price"]
-    out["Cost Basis"] = out["Shares"] * out["Avg Cost"]
-    out["P/L"] = out["Market Value"] - out["Cost Basis"]
-    out["P/L %"] = (out["Market Value"]/out["Cost Basis"]-1)*100
-    total = out["Market Value"].sum()
-    out["Weight %"] = out["Market Value"]/total*100 if total else 0
-    return out
+def enrich(df):
+    if df.empty:return df.copy()
+    x=df.copy()
+    x["Current Price"]=[quote(str(t).upper())["price"] for t in x["Ticker"]]
+    x["Market Value"]=x["Shares"]*x["Current Price"]
+    x["Cost Basis"]=x["Shares"]*x["Avg Cost"]
+    x["P/L"]=x["Market Value"]-x["Cost Basis"]
+    x["P/L %"]=(x["Market Value"]/x["Cost Basis"]-1)*100
+    total=x["Market Value"].sum()
+    x["Weight %"]=x["Market Value"]/total*100 if total else 0
+    return x
