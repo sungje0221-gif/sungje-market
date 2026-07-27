@@ -161,3 +161,21 @@ def inject_dashboard_v092() -> None:
         """,
         unsafe_allow_html=True,
     )
+
+# v0.93 heatmap component styles are injected separately to keep the base theme readable.
+def inject_heatmap_v093() -> None:
+    st.markdown(
+        """
+        <style>
+        .heat-hero{min-height:116px;padding:20px 22px;border-radius:17px;background:radial-gradient(circle at 90% 10%,rgba(47,211,154,.17),transparent 38%),linear-gradient(135deg,rgba(15,32,53,.98),rgba(7,19,33,.98));border:1px solid rgba(47,211,154,.18)}
+        .heat-hero span,.heat-stat span{display:block;font-size:9px;letter-spacing:.16em;color:#7890aa;font-weight:900}.heat-hero b{display:block;font-size:29px;letter-spacing:-.04em;margin-top:8px}.heat-hero p{font-size:11px;color:#91a5bb;margin:9px 0 0}.heat-hero strong{color:#d8e4f2}
+        .heat-stat{min-height:116px;padding:18px;border-radius:16px;background:linear-gradient(180deg,rgba(14,30,49,.98),rgba(7,18,31,.98));border:1px solid rgba(148,163,184,.14)}
+        .heat-stat b{display:block;font-size:25px;letter-spacing:-.04em;margin-top:10px}.heat-stat em{display:block;font-style:normal;font-size:10px;color:#71869d;margin-top:6px}.heat-stat.green b{color:#2fd39a}.heat-stat.red b{color:#ff6677}.heat-stat.blue b{color:#69a3ff}
+        [data-testid="stTabs"] [data-baseweb="tab-list"]{gap:8px;background:rgba(8,21,37,.72);padding:6px;border-radius:13px;border:1px solid rgba(148,163,184,.12)}
+        [data-testid="stTabs"] button[role="tab"]{border-radius:9px;padding:9px 14px;font-size:12px}
+        [data-testid="stTabs"] button[aria-selected="true"]{background:rgba(79,140,255,.17)}
+        @media(max-width:900px){.heat-hero,.heat-stat{min-height:auto}}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )

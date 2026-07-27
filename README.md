@@ -1,3 +1,11 @@
+# Sungje Investment OS v0.93
+
+## v0.93
+- Rebuilt Market Heatmap
+- Stock, sector rotation, and performance-matrix tabs
+- Market breadth and relative-strength ranking
+- Core/AI/Power/Korea/Metals comparison matrix
+
 # Sungje Investment OS v7
 
 This is the consolidated near-final build before Charles Schwab API approval and OAuth completion.

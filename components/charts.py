@@ -182,3 +182,62 @@ def stock_heatmap(df, title="Market Heat Map"):
         template="plotly_dark",
     )
     return fig
+
+
+def market_breadth_bar(df):
+    """Horizontal performance ranking used beneath heatmaps."""
+    clean = df.dropna(subset=["Change %"]).sort_values("Change %")
+    if clean.empty:
+        return go.Figure()
+    colors = ["#ff6677" if value < 0 else "#2fd39a" for value in clean["Change %"]]
+    fig = go.Figure(go.Bar(
+        x=clean["Change %"], y=clean["Ticker"], orientation="h",
+        marker_color=colors,
+        text=clean["Change %"].map(lambda value: f"{value:+.2f}%"),
+        textposition="outside",
+        hovertemplate="<b>%{y}</b><br>%{x:+.2f}%<extra></extra>",
+    ))
+    fig.add_vline(x=0, line_width=1, line_color="rgba(255,255,255,.25)")
+    fig.update_layout(
+        height=max(300, min(720, 32 * len(clean))),
+        margin=dict(l=8, r=55, t=28, b=10),
+        title="Relative Strength Ranking",
+        template="plotly_dark", paper_bgcolor="#071321", plot_bgcolor="#071321",
+        xaxis_title="Daily change (%)", yaxis_title=None, showlegend=False,
+    )
+    return fig
+
+
+def performance_matrix(df):
+    """Group-by-ticker heat matrix for quick cross-theme comparison."""
+    clean = df.dropna(subset=["Change %"]).copy()
+    if clean.empty:
+        return go.Figure()
+    groups = list(dict.fromkeys(clean["Sector"].tolist()))
+    tickers = list(dict.fromkeys(clean["Ticker"].tolist()))
+    z = []
+    text = []
+    for group in groups:
+        row = []
+        labels = []
+        subset = clean[clean["Sector"] == group].set_index("Ticker")
+        for ticker in tickers:
+            value = subset.loc[ticker, "Change %"] if ticker in subset.index else None
+            row.append(value)
+            labels.append("" if value is None or pd.isna(value) else f"{value:+.2f}%")
+        z.append(row)
+        text.append(labels)
+    fig = go.Figure(go.Heatmap(
+        z=z, x=tickers, y=groups, text=text, texttemplate="%{text}",
+        colorscale=[[0, "#8B1E2D"], [.42, "#d45b68"], [.5, "#26384b"], [.58, "#2D8A70"], [1, "#0E5F4D"]],
+        zmid=0, colorbar=dict(title="Daily %"),
+        hovertemplate="<b>%{x}</b><br>%{y}<br>%{z:+.2f}%<extra></extra>",
+        xgap=3, ygap=3,
+    ))
+    fig.update_layout(
+        height=470, title="Cross-Theme Performance Matrix",
+        margin=dict(l=12, r=12, t=55, b=35), template="plotly_dark",
+        paper_bgcolor="#071321", plot_bgcolor="#071321",
+        xaxis=dict(side="top", tickangle=-35), yaxis=dict(autorange="reversed"),
+    )
+    return fig
