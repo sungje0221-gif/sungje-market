@@ -2,6 +2,7 @@ import pandas as pd
 import streamlit as st
 
 from components.cards import stars
+from components.colored_tables import style_signed_columns
 from components.charts import advanced_chart
 from engine.analysis import analyze
 from engine.fundamentals import days_to_earnings, ticker_info
@@ -61,8 +62,10 @@ def render():
             "Earnings D-Day": days_to_earnings(ticker),
         })
 
+    watch_df = pd.DataFrame(rows).sort_values("Score", ascending=False)
+    watch_style = style_signed_columns(watch_df, ["Daily %"])
     st.dataframe(
-        pd.DataFrame(rows).sort_values("Score", ascending=False),
+        watch_style,
         use_container_width=True,
         hide_index=True,
         column_config={

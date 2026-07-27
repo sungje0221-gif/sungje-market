@@ -3,6 +3,7 @@ import streamlit as st
 
 from engine.schwab import SchwabError, accounts_with_positions, connection_status, flatten_positions
 from utils.formatters import money
+from components.colored_tables import style_signed_columns
 
 
 def classify(symbol, description, asset_type):
@@ -78,8 +79,12 @@ def render():
         st.info(message)
 
     st.markdown("### Position Weights")
+    advisor_display = positions[
+        ["Ticker","Description","Category","Market Value","Weight %","Unrealized P/L","Unrealized P/L %"]
+    ].copy()
+    advisor_style = style_signed_columns(advisor_display, ["Unrealized P/L", "Unrealized P/L %"])
     st.dataframe(
-        positions[["Ticker","Description","Category","Market Value","Weight %","Unrealized P/L","Unrealized P/L %"]],
+        advisor_style,
         use_container_width=True,
         hide_index=True,
         column_config={

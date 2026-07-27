@@ -4,6 +4,7 @@ import streamlit as st
 from engine.fundamentals import earnings_calendar, next_earnings_date, ticker_info
 from engine.market_data import history
 from utils.storage import load_json
+from components.colored_tables import style_signed_columns
 
 DEFAULT = ["GOOGL","META","AMZN","MSFT","AAPL","NVDA","AVGO","TSLA"]
 
@@ -42,8 +43,9 @@ def render():
 
     df = pd.DataFrame(rows)
     df = df.sort_values("D-Day", na_position="last")
+    earnings_style = style_signed_columns(df, ["Revenue Growth"])
     st.dataframe(
-        df,
+        earnings_style,
         use_container_width=True,
         hide_index=True,
         column_config={

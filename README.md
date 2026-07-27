@@ -1,4 +1,4 @@
-# Sungje Market Command Center Pro v6
+# Sungje Market Command Center Pro v6.1
 
 Major features:
 
@@ -13,3 +13,5 @@ Major features:
 - Portfolio AI Advisor with concentration and category analysis
 
 Real Schwab credentials belong in Streamlit Cloud Secrets, never in GitHub.
+
+- Positive values shown in blue; negative values shown in red across watchlists and portfolios.

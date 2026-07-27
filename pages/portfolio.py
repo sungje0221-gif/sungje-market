@@ -12,6 +12,7 @@ from engine.schwab import (
 )
 from utils.storage import load_csv, save_csv
 from utils.formatters import money
+from components.colored_tables import style_signed_columns
 
 COLS = ["Account", "Ticker", "Shares", "Avg Cost", "Category"]
 
@@ -83,12 +84,17 @@ def schwab_portfolio():
     c[2].metric("Today's P/L", money(total_day_pl))
     c[3].metric("Positions", len(positions))
 
+    live_display = positions[
+        ["Account", "Ticker", "Description", "Shares", "Avg Cost",
+         "Market Value", "Unrealized P/L", "Unrealized P/L %",
+         "Day P/L", "Day P/L %"]
+    ].copy()
+    live_style = style_signed_columns(
+        live_display,
+        ["Unrealized P/L", "Unrealized P/L %", "Day P/L", "Day P/L %"],
+    )
     st.dataframe(
-        positions[
-            ["Account", "Ticker", "Description", "Shares", "Avg Cost",
-             "Market Value", "Unrealized P/L", "Unrealized P/L %",
-             "Day P/L", "Day P/L %"]
-        ],
+        live_style,
         use_container_width=True,
         hide_index=True,
         column_config={
@@ -136,7 +142,8 @@ def manual_portfolio():
         return
 
     e = enrich(df)
-    st.dataframe(e, use_container_width=True, hide_index=True)
+    manual_style = style_signed_columns(e, ["P/L", "P/L %"])
+    st.dataframe(manual_style, use_container_width=True, hide_index=True)
 
 
 def csv_import():

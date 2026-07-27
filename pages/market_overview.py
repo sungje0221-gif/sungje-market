@@ -2,6 +2,7 @@ import pandas as pd,streamlit as st
 from engine.market_data import quote,history
 from engine.indicators import trend_score
 from components.charts import sector_treemap
+from components.colored_tables import style_signed_columns
 from components.tables import colored_change_table
 
 GROUPS={
