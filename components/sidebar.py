@@ -3,7 +3,7 @@ import streamlit as st
 def render_sidebar():
     with st.sidebar:
         st.markdown("## 📈 SUNGJE")
-        st.caption("MARKET COMMAND CENTER v4.1")
+        st.caption("MARKET COMMAND CENTER v6")
         st.divider()
         page = st.radio(
             "Navigation",
@@ -12,6 +12,7 @@ def render_sidebar():
                 "Market Overview",
                 "Watchlist",
                 "Portfolio",
+                "Portfolio AI Advisor",
                 "Buy Planner",
                 "Earnings",
                 "News & Briefing",
