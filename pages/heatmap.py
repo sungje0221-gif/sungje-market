@@ -2,10 +2,16 @@ from __future__ import annotations
 
 import pandas as pd
 import streamlit as st
+import plotly.graph_objects as go
+
+try:
+    from streamlit_plotly_events import plotly_events
+except ImportError:
+    plotly_events = None
 
 from components.charts import market_breadth_bar, performance_matrix, stock_heatmap
 from engine.fundamentals import ticker_info
-from engine.market_data import quote
+from engine.market_data import history, quote
 from utils.storage import load_json
 
 GROUPS = {
@@ -88,8 +94,108 @@ def _stat_card(label, value, note, tone="blue"):
     )
 
 
+
+
+def _money(value):
+    try:
+        return f"${float(value):,.2f}"
+    except (TypeError, ValueError):
+        return "—"
+
+
+def _number(value, suffix=""):
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return "—"
+    if abs(number) >= 1_000_000_000_000:
+        return f"{number / 1_000_000_000_000:.2f}T{suffix}"
+    if abs(number) >= 1_000_000_000:
+        return f"{number / 1_000_000_000:.2f}B{suffix}"
+    if abs(number) >= 1_000_000:
+        return f"{number / 1_000_000:.2f}M{suffix}"
+    return f"{number:,.2f}{suffix}"
+
+
+def _pct(value):
+    try:
+        return f"{float(value) * 100:+.1f}%"
+    except (TypeError, ValueError):
+        return "—"
+
+
+def _render_ticker_detail(ticker: str):
+    q = quote(ticker)
+    info = ticker_info(ticker)
+    change = q.get("change_pct")
+    tone = "#ff5d73" if isinstance(change, (int, float)) and change < 0 else "#31d6a0"
+    company = info.get("shortName") or info.get("longName") or ticker
+
+    st.markdown("---")
+    st.markdown(f"### {ticker} · {company}")
+    st.caption("Heatmap에서 선택한 종목의 핵심 정보입니다.")
+
+    cols = st.columns(6)
+    cols[0].metric("현재가", _money(q.get("price")), f"{change:+.2f}%" if isinstance(change, (int, float)) else None)
+    cols[1].metric("시가총액", _number(info.get("marketCap")))
+    cols[2].metric("Forward P/E", _number(info.get("forwardPE")))
+    cols[3].metric("52주 고가", _money(info.get("fiftyTwoWeekHigh")))
+    cols[4].metric("52주 저가", _money(info.get("fiftyTwoWeekLow")))
+    cols[5].metric("거래량", _number(q.get("volume")))
+
+    chart_data = history(ticker, "6mo", "1d")
+    if not chart_data.empty and "Close" in chart_data:
+        close = chart_data["Close"].dropna()
+        if not close.empty:
+            fig = go.Figure(go.Scatter(
+                x=close.index, y=close.values, mode="lines",
+                line={"width": 2, "color": tone},
+                hovertemplate=f"<b>{ticker}</b><br>%{{x|%b %d, %Y}}<br>$%{{y:,.2f}}<extra></extra>",
+            ))
+            fig.update_layout(
+                height=330, margin=dict(l=8, r=8, t=20, b=8),
+                paper_bgcolor="#0c1828", plot_bgcolor="#0c1828",
+                template="plotly_dark", xaxis_title=None, yaxis_title=None,
+                showlegend=False,
+            )
+            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
+    left, right = st.columns([1.25, 1])
+    with left:
+        st.markdown("#### 기본 정보")
+        details = pd.DataFrame([
+            ["Sector", info.get("sector") or "—"],
+            ["Industry", info.get("industry") or "—"],
+            ["Revenue Growth", _pct(info.get("revenueGrowth"))],
+            ["Earnings Growth", _pct(info.get("earningsGrowth"))],
+            ["Operating Margin", _pct(info.get("operatingMargins"))],
+            ["Analyst Target", _money(info.get("targetMeanPrice"))],
+        ], columns=["Item", "Value"])
+        st.dataframe(details, use_container_width=True, hide_index=True)
+    with right:
+        st.markdown("#### 바로가기")
+        st.link_button("Yahoo Finance", f"https://finance.yahoo.com/quote/{ticker}", use_container_width=True)
+        st.link_button("TradingView", f"https://www.tradingview.com/symbols/{ticker.replace('-', '')}/", use_container_width=True)
+        if st.button("☆ Watchlist에 추가", key=f"heat_add_{ticker}", use_container_width=True):
+            current = load_json("watchlist.json", [])
+            normalized = []
+            for item in current:
+                if isinstance(item, dict):
+                    normalized.append(item)
+                else:
+                    normalized.append(str(item).upper())
+            existing = {str(item.get("ticker", "")).upper() if isinstance(item, dict) else str(item).upper() for item in normalized}
+            if ticker.upper() not in existing:
+                normalized.append(ticker.upper())
+                from utils.storage import save_json
+                save_json("watchlist.json", normalized)
+                st.success(f"{ticker}를 Watchlist에 추가했습니다.")
+            else:
+                st.info(f"{ticker}는 이미 Watchlist에 있습니다.")
+
+
 def render():
-    st.markdown('<div class="page-kicker">LIVE MARKET MAP · VERSION 0.98</div>', unsafe_allow_html=True)
+    st.markdown('<div class="page-kicker">LIVE MARKET MAP · VERSION 2.04</div>', unsafe_allow_html=True)
     st.title("Market Heatmap")
     st.caption("시가총액, 등락률, 시장 폭과 섹터 순환을 한 화면에서 확인합니다. 데이터는 Yahoo Finance 기준입니다.")
 
@@ -146,7 +252,41 @@ def render():
         with stats[4]: _stat_card("LEADER", best, "Top performer", "green")
         with stats[5]: _stat_card("LAGGARD", worst, "Weakest", "red")
 
-        st.plotly_chart(stock_heatmap(df, title), use_container_width=True, config={"displaylogo": False, "scrollZoom": False})
+        heatmap_fig = stock_heatmap(df, title)
+        selected_ticker = st.session_state.get("heatmap_selected_ticker")
+        if plotly_events is not None:
+            clicks = plotly_events(
+                heatmap_fig,
+                click_event=True,
+                hover_event=False,
+                select_event=False,
+                override_height=560,
+                key=f"heatmap_click_{mode}_{title}",
+            )
+            if clicks:
+                point = clicks[0]
+                label = point.get("label") or point.get("text")
+                if not label and point.get("pointNumber") is not None:
+                    try:
+                        label = str(df.iloc[int(point["pointNumber"])]["Ticker"])
+                    except Exception:
+                        label = None
+                if label:
+                    st.session_state["heatmap_selected_ticker"] = str(label).upper()
+                    selected_ticker = str(label).upper()
+        else:
+            st.plotly_chart(heatmap_fig, use_container_width=True, config={"displaylogo": False, "scrollZoom": False})
+            selected_ticker = st.selectbox(
+                "종목 상세 보기",
+                ["선택하세요"] + df["Ticker"].astype(str).tolist(),
+                key=f"heatmap_detail_select_{mode}_{title}",
+            )
+            if selected_ticker == "선택하세요":
+                selected_ticker = None
+
+        if selected_ticker and selected_ticker in set(df["Ticker"].astype(str).str.upper()):
+            _render_ticker_detail(selected_ticker)
+
         st.plotly_chart(market_breadth_bar(df), use_container_width=True, config={"displayModeBar": False})
 
         leaders, laggards = st.columns(2, gap="large")
