@@ -2,29 +2,18 @@ from datetime import datetime
 
 import streamlit as st
 
-
 NAV_GROUPS = {
     "HOME": ["Command Center"],
-    "MARKETS": ["Market Overview", "Market Heat Maps", "Watchlist"],
-    "PORTFOLIO": ["Portfolio", "Portfolio AI Advisor", "Buy Planner"],
-    "INTELLIGENCE": ["Earnings", "News & Briefing", "AI Analysis Engine"],
-    "SYSTEM": ["Trading Journal", "Schwab Connection", "Settings"],
+    "MARKETS": ["Markets", "Heatmap", "Watchlist"],
+    "PORTFOLIO": ["Portfolio", "AI Advisor", "Buy Planner"],
+    "INTELLIGENCE": ["Earnings", "News", "AI Lab"],
+    "SYSTEM": ["Journal", "Schwab", "Settings"],
 }
 
 NAV_ICONS = {
-    "Command Center": "⌂",
-    "Market Overview": "◫",
-    "Market Heat Maps": "▦",
-    "Watchlist": "☆",
-    "Portfolio": "◉",
-    "Portfolio AI Advisor": "✦",
-    "Buy Planner": "＋",
-    "Earnings": "◷",
-    "News & Briefing": "≡",
-    "AI Analysis Engine": "◇",
-    "Trading Journal": "✎",
-    "Schwab Connection": "⛓",
-    "Settings": "⚙",
+    "Command Center": "⌂", "Markets": "◫", "Heatmap": "▦", "Watchlist": "☆",
+    "Portfolio": "◉", "AI Advisor": "✦", "Buy Planner": "＋", "Earnings": "◷",
+    "News": "≡", "AI Lab": "◇", "Journal": "✎", "Schwab": "⛓", "Settings": "⚙",
 }
 
 
@@ -32,11 +21,9 @@ def _refresh_all() -> None:
     st.cache_data.clear()
     try:
         from engine.schwab import clear_cache
-
         clear_cache()
     except Exception:
         pass
-
     st.session_state["last_manual_refresh"] = datetime.now().strftime("%I:%M:%S %p")
     st.rerun()
 
@@ -47,23 +34,16 @@ def render_sidebar() -> str:
             """
             <div class="os-brand">
                 <div class="os-brand-mark">S</div>
-                <div>
-                    <div class="os-brand-title">SUNGJE</div>
-                    <div class="os-brand-subtitle">INVESTMENT OS 1.0</div>
-                </div>
+                <div><div class="os-brand-title">SUNGJE</div>
+                <div class="os-brand-subtitle">INVESTMENT OS 1.0</div></div>
             </div>
             """,
             unsafe_allow_html=True,
         )
-
         if st.button("↻  Refresh Market Data", use_container_width=True, type="primary"):
             _refresh_all()
-
         last_refresh = st.session_state.get("last_manual_refresh", "Not refreshed yet")
-        st.markdown(
-            f'<div class="refresh-time">Last manual refresh · {last_refresh}</div>',
-            unsafe_allow_html=True,
-        )
+        st.markdown(f'<div class="refresh-time">Last refresh · {last_refresh}</div>', unsafe_allow_html=True)
 
         choices = [item for group in NAV_GROUPS.values() for item in group]
         current = st.session_state.get("os_page", "Command Center")
@@ -74,13 +54,9 @@ def render_sidebar() -> str:
         for group_name, group_items in NAV_GROUPS.items():
             st.markdown(f'<div class="nav-group-label">{group_name}</div>', unsafe_allow_html=True)
             for item in group_items:
-                active = item == selected
-                button_label = f"{NAV_ICONS[item]}   {item}"
                 if st.button(
-                    button_label,
-                    key=f"nav_{item}",
-                    use_container_width=True,
-                    type="primary" if active else "secondary",
+                    f"{NAV_ICONS[item]}   {item}", key=f"nav_{item}", use_container_width=True,
+                    type="primary" if item == selected else "secondary",
                 ):
                     st.session_state["os_page"] = item
                     st.rerun()
@@ -88,12 +64,10 @@ def render_sidebar() -> str:
         st.markdown(
             """
             <div class="sidebar-status-card">
-                <div class="status-row"><span class="status-dot"></span><b>Market data online</b></div>
-                <div class="status-copy">Yahoo Finance fallback active</div>
-                <div class="status-copy">Schwab connection optional</div>
+              <div class="status-row"><span class="status-dot"></span><b>Market data online</b></div>
+              <div class="status-copy">Yahoo Finance · quotes may be delayed</div>
             </div>
             """,
             unsafe_allow_html=True,
         )
-
     return selected

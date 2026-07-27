@@ -104,7 +104,19 @@ def inject_theme() -> None:
         .statlabel{font-size:10px;letter-spacing:.08em;text-transform:uppercase;opacity:.6}
         .statvalue{font-size:22px;font-weight:820;margin-top:7px}
         @media (max-width: 900px){.block-container{padding-left:1rem;padding-right:1rem}.hero-row{display:block}.hero-clock{text-align:left;margin-top:14px}}
+
+        .compact-hero{padding:17px 21px;margin-bottom:14px}.compact-hero .hero-title{font-size:27px}
+        .hero-market-strip{display:flex;gap:9px;align-items:stretch}.hero-quote{min-width:112px;padding:9px 11px;border-radius:12px;background:rgba(5,15,27,.55);border:1px solid rgba(111,143,178,.18)}
+        .hero-quote span{display:block;font-size:9px;color:#7f94aa;text-transform:uppercase;letter-spacing:.1em}.hero-quote b{display:block;font-size:15px;margin-top:3px}.hero-quote em{font-style:normal;font-size:10px}.up{color:#47d7ac}.down{color:#ff6b7d}
+        .action-card{min-height:100px;border-radius:15px;padding:15px 16px;background:linear-gradient(180deg,rgba(13,29,48,.98),rgba(8,20,34,.98));border:1px solid var(--os-border)}
+        .action-card.buy{border-top:2px solid #35d6a5}.action-card.hold{border-top:2px solid #64a6ff}.action-card.avoid{border-top:2px solid #ff6474}.action-card.watch{border-top:2px solid #f5c451}
+        .action-label{font-size:11px;font-weight:900;letter-spacing:.14em}.buy .action-label{color:#35d6a5}.hold .action-label{color:#64a6ff}.avoid .action-label{color:#ff6474}.watch .action-label{color:#f5c451}
+        .action-copy{font-size:12px;line-height:1.6;color:#bdcad8;margin-top:12px}.brief-score{font-size:22px;font-weight:900}.brief-copy{line-height:1.8;margin-top:10px;color:#b8c6d6}
+        .page-kicker{font-size:10px;letter-spacing:.18em;color:#6f89a5;font-weight:800;margin-bottom:-8px}.mini-stat{padding:13px 14px;border-radius:14px;background:linear-gradient(180deg,rgba(15,32,53,.98),rgba(8,20,34,.98));border:1px solid var(--os-border)}
+        .mini-stat span{display:block;font-size:9px;letter-spacing:.1em;color:#768ba1}.mini-stat b{display:block;font-size:22px;margin-top:5px}.mini-stat em{display:block;font-style:normal;font-size:10px;color:#71869a;margin-top:3px}
         </style>
         """,
         unsafe_allow_html=True,
     )
+
+# Investment OS 1.0 Part 1B visual layer

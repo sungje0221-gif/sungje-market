@@ -27,17 +27,17 @@ page = render_sidebar()
 
 ROUTES = {
     "Command Center": render_command_center,
-    "Market Overview": render_market_overview,
-    "Market Heat Maps": render_heatmap,
+    "Markets": render_market_overview,
+    "Heatmap": render_heatmap,
     "Watchlist": render_watchlist,
     "Portfolio": render_portfolio,
-    "Portfolio AI Advisor": render_portfolio_advisor,
+    "AI Advisor": render_portfolio_advisor,
     "Buy Planner": render_buy_planner,
     "Earnings": render_earnings,
-    "News & Briefing": render_news,
-    "Trading Journal": render_journal,
-    "AI Analysis Engine": render_ai_engine,
-    "Schwab Connection": render_schwab_connect,
+    "News": render_news,
+    "Journal": render_journal,
+    "AI Lab": render_ai_engine,
+    "Schwab": render_schwab_connect,
     "Settings": render_settings,
 }
 
