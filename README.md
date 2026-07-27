@@ -1,6 +1,6 @@
-# Sungje Investment OS v0.95
+# Sungje Investment OS v0.96
 
-## v0.95
+## v0.96
 - Rebuilt Market Heatmap
 - Stock, sector rotation, and performance-matrix tabs
 - Market breadth and relative-strength ranking
@@ -73,3 +73,10 @@ This build starts the Investment OS 1.0 redesign:
 - Personal watchlist radar for VOO, VXF, GOOGL, CEG, SKHY, KORU, QQQM and SMH
 - Market regime indicator and redesigned AI decision context
 - Responsive desktop/tablet layout
+
+
+## v0.96
+- Mobile-responsive layout and spacing
+- Scrollable tabs and tables on narrow screens
+- Mobile-friendly heatmap sizing
+- Automatic sidebar behavior on phones

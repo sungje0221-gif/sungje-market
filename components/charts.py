@@ -202,7 +202,7 @@ def stock_heatmap(df, title="Market Heat Map"):
     ))
     fig.update_layout(
         title=title,
-        height=700,
+        height=560,
         margin=dict(l=4, r=4, t=42, b=4),
         paper_bgcolor="#0c1828",
         plot_bgcolor="#0c1828",

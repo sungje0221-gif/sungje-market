@@ -103,7 +103,32 @@ def inject_theme() -> None:
         .statbox{background:#0c1828;border:1px solid var(--os-border);border-radius:14px;padding:14px 15px;min-height:92px;}
         .statlabel{font-size:10px;letter-spacing:.08em;text-transform:uppercase;opacity:.6}
         .statvalue{font-size:22px;font-weight:820;margin-top:7px}
-        @media (max-width: 900px){.block-container{padding-left:1rem;padding-right:1rem}.hero-row{display:block}.hero-clock{text-align:left;margin-top:14px}}
+        @media (max-width: 900px){
+          .block-container{padding:1rem .85rem 2rem!important;max-width:100%!important}
+          .hero-row{display:block}.hero-clock{text-align:left;margin-top:14px}
+          .hero{padding:18px 16px;border-radius:16px}.hero-title{font-size:25px}.hero-sub{font-size:12px;line-height:1.55}
+          .kcard,.signal-card,.watch-card,.action-card,.panel,.ai-brief-panel{min-height:auto!important}
+          [data-testid="stHorizontalBlock"]{gap:.65rem!important}
+          [data-testid="stDataFrame"],[data-testid="stTable"]{overflow-x:auto!important}
+          [data-testid="stPlotlyChart"]{overflow:hidden;border-radius:13px}
+          [data-testid="stTabs"] [data-baseweb="tab-list"]{overflow-x:auto;white-space:nowrap;scrollbar-width:none}
+          [data-testid="stTabs"] [data-baseweb="tab-list"]::-webkit-scrollbar{display:none}
+          [data-testid="stTabs"] button[role="tab"]{flex:0 0 auto!important;padding:8px 10px!important}
+          .section-heading h3{font-size:19px}.section-heading{margin-top:20px}
+          .statvalue,.mini-stat b{font-size:19px}.kvalue,.signal-value{font-size:22px}
+          .os-brand-title{font-size:15px}.os-brand-subtitle{font-size:9px}
+        }
+        @media (max-width: 640px){
+          [data-testid="stSidebar"]{min-width:250px!important}
+          .block-container{padding-top:.75rem!important}
+          .hero-market-strip{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:7px!important}
+          .hero-quote{padding:8px 9px!important}.hero-quote b{font-size:13px!important}
+          .terminal-hero .hero-title{font-size:24px!important}.terminal-hero{padding:16px!important}
+          .heat-hero b{font-size:24px!important}.heat-hero,.heat-stat{padding:15px!important}
+          div[data-testid="stMetric"]{padding:11px!important}
+          .stButton>button{min-height:40px}
+          h1{font-size:1.8rem!important}h2{font-size:1.45rem!important}h3{font-size:1.15rem!important}
+        }
 
         .compact-hero{padding:17px 21px;margin-bottom:14px}.compact-hero .hero-title{font-size:27px}
         .hero-market-strip{display:flex;gap:9px;align-items:stretch}.hero-quote{min-width:112px;padding:9px 11px;border-radius:12px;background:rgba(5,15,27,.55);border:1px solid rgba(111,143,178,.18)}
