@@ -1,82 +1,43 @@
-# Sungje Investment OS v0.96
+# Sungje Investment OS v1.00
 
-## v0.96
-- Rebuilt Market Heatmap
-- Stock, sector rotation, and performance-matrix tabs
-- Market breadth and relative-strength ranking
-- Core/AI/Power/Korea/Metals comparison matrix
+개인 투자 대시보드의 완결판입니다. Streamlit Cloud에서 실행하도록 구성되어 있습니다.
 
-# Sungje Investment OS v7
+## 주요 기능
 
-This is the consolidated near-final build before Charles Schwab API approval and OAuth completion.
+- Command Center: 주요 시장 지표와 개인 관심 종목 요약
+- Markets / Heatmap: 지수, 섹터, 종목 상대강도 및 트리맵
+- Watchlist: 관심 종목 추적
+- Portfolio: Schwab 연결, 수동 포트폴리오, CSV 가져오기
+- AI Advisor: 추세, 이동평균, RSI 기반 BUY / HOLD / WAIT / TRIM / SELL 신호
+- Buy Planner: 분할매수 계획
+- Earnings / News / Journal
+- Settings: 개인 설정, 데이터 백업, 시스템 진단
+- 모바일 반응형 화면
 
-## Included
+## 설치
 
-- Command Center with market score, AI score, risk, market overview, opportunities, sector rotation and Today's Playbook
-- Global Refresh All Data button and last refreshed time
-- Watchlist with positive values in blue and negative values in red
-- Advanced charts: 1D, 5D, 1M, 3M, 6M, YTD, 1Y and 5Y
-- MA20, MA50, MA100, MA200, Bollinger Bands, Volume, RSI and MACD
-- 52-week range, period returns, volume ratio and support/resistance
-- Resilient fundamental-data fallbacks and a Fundamental Score
-- Index, sector, ETF, AI-theme and personal-watchlist heat maps
-- Manual portfolio and Schwab-connected portfolio views
-- Portfolio AI Advisor
-- Buy Planner
-- Earnings Radar
-- News & Briefing
-- Trading Journal
-- Schwab OAuth connection page
-- Schwab-first quote adapter with automatic Yahoo Finance fallback
-
-## Schwab behavior
-
-Before Schwab approval and OAuth connection:
-- Quotes and fundamentals use Yahoo Finance.
-- Schwab portfolio pages remain disconnected.
-
-After Schwab approval and OAuth connection:
-- Account balances and positions come from Schwab.
-- The quote adapter attempts Schwab Market Data first, then falls back to Yahoo Finance.
-- A later update may be required if Schwab changes endpoint permissions or streaming requirements.
-
-## Streamlit deployment
-
-Upload this project to GitHub, set `app.py` as the entry point, then add:
-
-```toml
-[schwab]
-client_id = "YOUR_CLIENT_ID"
-client_secret = "YOUR_CLIENT_SECRET"
-redirect_uri = "YOUR_CALLBACK_URL"
+```bash
+pip install -r requirements.txt
+streamlit run app.py
 ```
 
-to Streamlit Cloud Secrets after Schwab approves the app.
+## Streamlit Cloud 배포
 
-Never commit real Schwab credentials or tokens to GitHub.
+1. 이 폴더의 내용을 GitHub 저장소에 업로드합니다.
+2. Streamlit Community Cloud에서 `app.py`를 메인 파일로 지정합니다.
+3. Schwab을 사용할 경우 `.streamlit/secrets.toml.example`을 참고해 Secrets를 등록합니다.
 
-## Investment OS 1.0 — Part 1A
+## 개인 데이터
 
-This build starts the Investment OS 1.0 redesign:
+`data/` 폴더에 다음 파일이 저장됩니다.
 
-- New grouped navigation sidebar
-- New OS 1.0 visual system and responsive layout
-- Rebuilt Command Center hierarchy
-- Personalized opportunity list including SKHY and VXF
-- Safer dashboard fallbacks when market-data calls fail
+- `portfolio.csv`
+- `watchlist.json`
+- `journal.csv`
+- `settings.json`
 
-## v0.92 Command Center Upgrade
+Settings 페이지에서 개인 데이터 ZIP 백업을 내려받을 수 있습니다.
 
-- Compact terminal-style market header
-- Six live signal cards with one-month sparklines
-- BUY / HOLD / AVOID / WATCH playbook
-- Personal watchlist radar for VOO, VXF, GOOGL, CEG, SKHY, KORU, QQQM and SMH
-- Market regime indicator and redesigned AI decision context
-- Responsive desktop/tablet layout
+## 주의
 
-
-## v0.96
-- Mobile-responsive layout and spacing
-- Scrollable tabs and tables on narrow screens
-- Mobile-friendly heatmap sizing
-- Automatic sidebar behavior on phones
+이 앱의 신호는 규칙 기반 참고자료이며 투자 자문이 아닙니다. Yahoo Finance 데이터는 지연되거나 누락될 수 있습니다.

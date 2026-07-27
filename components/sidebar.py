@@ -35,7 +35,7 @@ def render_sidebar() -> str:
             <div class="os-brand">
                 <div class="os-brand-mark">S</div>
                 <div><div class="os-brand-title">SUNGJE</div>
-                <div class="os-brand-subtitle">INVESTMENT OS v0.98</div></div>
+                <div class="os-brand-subtitle">INVESTMENT OS v1.00</div></div>
             </div>
             """,
             unsafe_allow_html=True,

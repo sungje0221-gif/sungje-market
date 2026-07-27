@@ -120,7 +120,7 @@ def _positions() -> tuple[pd.DataFrame, str]:
 
 
 def render() -> None:
-    st.markdown('<div class="page-kicker">AI ADVISOR 2.0 · VERSION 0.98</div>', unsafe_allow_html=True)
+    st.markdown('<div class="page-kicker">AI ADVISOR 2.0 · VERSION 1.00</div>', unsafe_allow_html=True)
     st.title("Portfolio AI Advisor")
     st.caption("추세·RSI·이동평균을 결합한 규칙 기반 신호입니다. 매수는 항상 분할로 실행하세요.")
 

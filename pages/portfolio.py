@@ -147,8 +147,8 @@ def manual_portfolio():
 
 
 def csv_import():
-    st.caption("Schwab 웹사이트에서 내려받은 Positions CSV를 분석합니다.")
-    uploaded = st.file_uploader("Schwab Positions CSV", type=["csv"])
+    st.caption("Schwab 또는 다른 증권사 CSV를 불러와 수동 포트폴리오 형식으로 저장합니다.")
+    uploaded = st.file_uploader("Positions CSV", type=["csv"])
     if not uploaded:
         return
     try:
@@ -156,7 +156,46 @@ def csv_import():
     except Exception as exc:
         st.error(f"CSV를 읽지 못했습니다: {exc}")
         return
+
     st.dataframe(raw, use_container_width=True, hide_index=True)
+    columns = list(raw.columns)
+    if not columns:
+        st.warning("CSV에 열이 없습니다.")
+        return
+
+    def guess(names, fallback=0):
+        lowered = {str(c).lower().strip(): i for i, c in enumerate(columns)}
+        for name in names:
+            for key, idx in lowered.items():
+                if name in key:
+                    return idx
+        return fallback
+
+    st.markdown("#### Column Mapping")
+    c1, c2, c3, c4 = st.columns(4)
+    ticker_col = c1.selectbox("Ticker / Symbol", columns, index=guess(["symbol", "ticker"]))
+    shares_col = c2.selectbox("Shares / Quantity", columns, index=guess(["quantity", "shares", "qty"]))
+    cost_col = c3.selectbox("Average Cost", columns, index=guess(["average price", "avg cost", "price", "cost"]))
+    account_col = c4.selectbox("Account (optional)", ["(Use Manual)"] + columns)
+    manual_account = st.text_input("Default Account", "Taxable")
+    category = st.selectbox("Default Category", ["ETF", "Mega Cap", "AI", "Semiconductor", "Power", "Defense", "Healthcare", "Other"])
+
+    if st.button("Import into Manual Portfolio", type="primary", use_container_width=True):
+        converted = pd.DataFrame({
+            "Ticker": raw[ticker_col].astype(str).str.upper().str.strip(),
+            "Shares": pd.to_numeric(raw[shares_col], errors="coerce").fillna(0),
+            "Avg Cost": pd.to_numeric(raw[cost_col].astype(str).str.replace("$", "", regex=False).str.replace(",", "", regex=False), errors="coerce").fillna(0),
+        })
+        converted["Account"] = raw[account_col].astype(str) if account_col != "(Use Manual)" else manual_account
+        converted["Category"] = category
+        converted = converted[converted["Ticker"].ne("") & converted["Shares"].gt(0)]
+        converted = converted[COLS]
+        if converted.empty:
+            st.error("가져올 수 있는 유효한 포지션이 없습니다.")
+        else:
+            existing = load_csv("portfolio.csv", COLS)
+            save_csv("portfolio.csv", pd.concat([existing, converted], ignore_index=True))
+            st.success(f"{len(converted)}개 포지션을 저장했습니다.")
 
 
 def render():
