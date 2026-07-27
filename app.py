@@ -11,6 +11,7 @@ from pages.news import render as render_news
 from pages.journal import render as render_journal
 from pages.ai_engine import render as render_ai_engine
 from pages.settings import render as render_settings
+from pages.schwab_connect import render as render_schwab_connect
 
 st.set_page_config(
     page_title="Sungje Market Command Center Pro",
@@ -32,6 +33,7 @@ ROUTES = {
     "News & Briefing": render_news,
     "Trading Journal": render_journal,
     "AI Analysis Engine": render_ai_engine,
+    "Schwab Connection": render_schwab_connect,
     "Settings": render_settings,
 }
 

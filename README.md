@@ -1,6 +1,5 @@
-# Sungje Market Command Center Pro v4
+# Sungje Market Command Center Pro v5
 
-Complete personal investment dashboard.
+Includes Schwab OAuth connection, live balances, live positions, manual portfolio, and CSV fallback.
 
-## Deploy
-Upload all files and folders to GitHub and deploy `app.py` in Streamlit Community Cloud.
+Never commit real Schwab credentials to GitHub. Put them in Streamlit Cloud App settings > Secrets.

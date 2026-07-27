@@ -5,6 +5,7 @@ from engine.market_data import quote,history
 from engine.indicators import trend_score
 from engine.analysis import market_brief
 from utils.formatters import money,pct
+from components.tables import colored_change_table
 
 SECTORS={"Technology":"XLK","Communication":"XLC","Consumer Cyclical":"XLY","Financials":"XLF",
 "Industrials":"XLI","Healthcare":"XLV","Energy":"XLE","Utilities":"XLU","Real Estate":"XLRE",
@@ -41,8 +42,7 @@ def render():
         rows=[]
         for label,t in {"S&P 500":"^GSPC","NASDAQ":"^IXIC","Dow Jones":"^DJI","Russell 2000":"^RUT","VIX":"^VIX","US 10Y":"^TNX","DXY":"DX-Y.NYB","WTI":"CL=F"}.items():
             q=quote(t);rows.append({"Asset":label,"Price":q["price"],"Change %":q["change_pct"]})
-        st.dataframe(pd.DataFrame(rows),use_container_width=True,hide_index=True,
-            column_config={"Price":st.column_config.NumberColumn(format="%.2f"),"Change %":st.column_config.NumberColumn(format="%.2f%%")})
+        colored_change_table(pd.DataFrame(rows), price_col="Price", change_col="Change %")
     with right:
         st.markdown("### Today's Opportunities")
         opp=[]
@@ -50,8 +50,7 @@ def render():
             s=trend_score(history(t,"6mo"));q=quote(t)
             opp.append({"Ticker":t,"Score":round(s),"Daily %":q["change_pct"]})
         odf=pd.DataFrame(opp).sort_values("Score",ascending=False).head(6)
-        st.dataframe(odf,use_container_width=True,hide_index=True,
-            column_config={"Score":st.column_config.ProgressColumn(min_value=0,max_value=100),"Daily %":st.column_config.NumberColumn(format="%.2f%%")})
+        colored_change_table(odf, price_col="__none__", change_col="Daily %", score_col="Score")
 
     st.markdown("### Sector Rotation")
     srows=[]

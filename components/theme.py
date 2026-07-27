@@ -42,5 +42,16 @@ def inject_theme():
     }
     div[data-testid="stDataFrame"]{border:1px solid rgba(255,255,255,.06);border-radius:14px;overflow:hidden}
     button[kind="primary"]{border-radius:10px}
+    
+    .delta-up{color:#4DA3FF;font-weight:750}
+    .delta-down{color:#FF6474;font-weight:750}
+    .delta-flat{color:#A9B4C4;font-weight:650}
+    .statbox{
+      background:#0c1828;border:1px solid rgba(255,255,255,.07);
+      border-radius:14px;padding:14px 15px;min-height:92px
+    }
+    .statlabel{font-size:11px;letter-spacing:.08em;text-transform:uppercase;opacity:.6}
+    .statvalue{font-size:22px;font-weight:820;margin-top:7px}
     </style>
+    
     """, unsafe_allow_html=True)
