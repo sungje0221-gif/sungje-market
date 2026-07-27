@@ -1,4 +1,4 @@
-# Sungje Investment OS v2.01
+# Sungje Investment OS v2.02
 
 ## Watchlist Pro
 

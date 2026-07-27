@@ -101,11 +101,55 @@ def render():
     else:
         filtered.sort(key=lambda x: x["ticker"])
 
-    st.markdown("### Investment Cards")
+    st.markdown("### Watchlist Snapshot")
     if not filtered:
         st.info("No matching tickers.")
+    else:
+        snapshot = pd.DataFrame([
+            {
+                "Pin": "★" if row.get("pinned") else "☆",
+                "Ticker": row["ticker"],
+                "Price": row.get("price"),
+                "Day %": row.get("daily_pct"),
+                "Signal": row.get("signal") or "WAIT",
+                "AI": row.get("action") or "—",
+                "Score": row.get("score"),
+                "RSI": row.get("rsi"),
+                "Target": row.get("target_price"),
+                "Stop": row.get("stop_price"),
+                "Earnings": None if row.get("earnings") is None else f"D{row['earnings']:+d}",
+                "Tag": row.get("tag", "Watch"),
+                "Memo": row.get("memo", ""),
+            }
+            for row in filtered
+        ])
+        st.dataframe(
+            snapshot,
+            use_container_width=True,
+            hide_index=True,
+            height=min(560, 42 + 35 * len(snapshot)),
+            column_config={
+                "Pin": st.column_config.TextColumn("", width="small"),
+                "Ticker": st.column_config.TextColumn("Ticker", width="small"),
+                "Price": st.column_config.NumberColumn("Price", format="$%.2f"),
+                "Day %": st.column_config.NumberColumn("Day", format="%+.2f%%"),
+                "Signal": st.column_config.TextColumn("Signal", width="medium"),
+                "AI": st.column_config.TextColumn("AI", width="medium"),
+                "Score": st.column_config.NumberColumn("Score", format="%.0f"),
+                "RSI": st.column_config.NumberColumn("RSI", format="%.1f"),
+                "Target": st.column_config.NumberColumn("Target", format="$%.2f"),
+                "Stop": st.column_config.NumberColumn("Stop", format="$%.2f"),
+                "Earnings": st.column_config.TextColumn("Earnings", width="small"),
+                "Tag": st.column_config.TextColumn("Tag", width="small"),
+                "Memo": st.column_config.TextColumn("Memo", width="large"),
+            },
+        )
+
+    st.markdown("### Investment Cards · Edit & Details")
     for row in filtered:
-        title = f"{'★' if row.get('pinned') else '☆'} {row['ticker']} · {row['signal']}"
+        price_text = money(row.get("price"))
+        day_text = "" if row.get("daily_pct") is None else f" · {row['daily_pct']:+.2f}%"
+        title = f"{'★' if row.get('pinned') else '☆'} {row['ticker']} · {price_text}{day_text} · {row['signal']}"
         with st.expander(title, expanded=False):
             m = st.columns(6)
             m[0].metric("Price", money(row.get("price")), None if row.get("daily_pct") is None else f"{row['daily_pct']:+.2f}%")
