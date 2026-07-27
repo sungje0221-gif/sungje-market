@@ -1,19 +1,24 @@
 from pathlib import Path
-import json, pandas as pd
-DATA=Path(__file__).resolve().parents[1]/'data'
+import json
+import pandas as pd
 
-def load_json(name,default):
-    p=DATA/name
-    try: return json.loads(p.read_text(encoding='utf-8')) if p.exists() else default
+ROOT = Path(__file__).resolve().parents[1]
+DATA = ROOT / "data"
+
+def load_json(name, default):
+    path = DATA / name
+    if not path.exists(): return default
+    try: return json.loads(path.read_text(encoding="utf-8"))
     except Exception: return default
 
-def save_json(name,payload):
-    (DATA/name).write_text(json.dumps(payload,indent=2),encoding='utf-8')
+def save_json(name, payload):
+    (DATA / name).write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
-def load_csv(name,columns):
-    p=DATA/name
-    try: return pd.read_csv(p) if p.exists() else pd.DataFrame(columns=columns)
+def load_csv(name, columns):
+    path = DATA / name
+    if not path.exists(): return pd.DataFrame(columns=columns)
+    try: return pd.read_csv(path)
     except Exception: return pd.DataFrame(columns=columns)
 
-def save_csv(name,df):
-    df.to_csv(DATA/name,index=False)
+def save_csv(name, df):
+    df.to_csv(DATA / name, index=False)

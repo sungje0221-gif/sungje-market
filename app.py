@@ -1,17 +1,35 @@
 import streamlit as st
-from components.sidebar import render_sidebar
-from pages import command_center, watchlist, portfolio, buy_planner, earnings, news, journal, settings
 
-st.set_page_config(page_title='Sungje Market Command Center Pro', page_icon='📈', layout='wide', initial_sidebar_state='expanded')
+from components.sidebar import render_sidebar
+from components.theme import inject_theme
+from views.command_center import render as render_command_center
+from views.watchlist import render as render_watchlist
+from views.portfolio import render as render_portfolio
+from views.buy_planner import render as render_buy_planner
+from views.earnings import render as render_earnings
+from views.news import render as render_news
+from views.journal import render as render_journal
+from views.settings import render as render_settings
+
+st.set_page_config(
+    page_title="Sungje Market Command Center Pro",
+    page_icon="📈",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+inject_theme()
 page = render_sidebar()
-ROUTES = {
-    'Command Center': command_center.render,
-    'Watchlist': watchlist.render,
-    'Portfolio': portfolio.render,
-    'Buy Planner': buy_planner.render,
-    'Earnings': earnings.render,
-    'News': news.render,
-    'Trading Journal': journal.render,
-    'Settings': settings.render,
+
+routes = {
+    "Command Center": render_command_center,
+    "Watchlist": render_watchlist,
+    "Portfolio": render_portfolio,
+    "Buy Planner": render_buy_planner,
+    "Earnings": render_earnings,
+    "News": render_news,
+    "Trading Journal": render_journal,
+    "Settings": render_settings,
 }
-ROUTES[page]()
+
+routes[page]()

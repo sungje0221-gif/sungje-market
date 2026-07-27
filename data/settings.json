@@ -1,1 +1,6 @@
-{"name":"Sungje","risk_profile":"Balanced","default_budget":5000,"notes":"No crypto, no biotech. Prefer staged entries."}
+{
+  "name": "Sungje",
+  "risk_profile": "Balanced",
+  "default_budget": 5000,
+  "notes": "No crypto, no biotech. Prefer staged entries."
+}
