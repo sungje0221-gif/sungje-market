@@ -1,5 +1,10 @@
 # Changelog
 
+## v2.03
+- Watchlist Snapshot의 Ticker, Price, Day 값을 당일 등락 방향에 따라 색상 표시
+- 상승: 빨강 / 하락: 파랑 / 보합: 회색
+- 접힌 Investment Card 제목에도 방향 아이콘 표시
+
 ## v2.02
 
 - Added always-visible Watchlist Snapshot with price, daily change, AI signal, score, RSI, target, stop, earnings, tag, and memo.

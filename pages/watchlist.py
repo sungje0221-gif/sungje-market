@@ -123,16 +123,47 @@ def render():
             }
             for row in filtered
         ])
+        def _day_color(value):
+            if pd.isna(value):
+                return ""
+            if value > 0:
+                return "color: #ff5c7a; font-weight: 800;"
+            if value < 0:
+                return "color: #4da3ff; font-weight: 800;"
+            return "color: #a9b7c9; font-weight: 700;"
+
+        def _row_market_color(row):
+            change = row.get("Day %")
+            if pd.isna(change):
+                color = "#e8eef7"
+            elif change > 0:
+                color = "#ff5c7a"
+            elif change < 0:
+                color = "#4da3ff"
+            else:
+                color = "#a9b7c9"
+            styles = pd.Series("", index=row.index)
+            for column in ("Ticker", "Price", "Day %"):
+                if column in styles.index:
+                    styles[column] = f"color: {color}; font-weight: 800;"
+            return styles
+
+        styled_snapshot = (
+            snapshot.style
+            .apply(_row_market_color, axis=1)
+            .format({"Price": "${:,.2f}", "Day %": "{:+.2f}%", "Score": "{:.0f}", "RSI": "{:.1f}", "Target": "${:,.2f}", "Stop": "${:,.2f}"}, na_rep="—")
+        )
+        st.caption("당일 상승은 빨강, 하락은 파랑으로 표시됩니다.")
         st.dataframe(
-            snapshot,
+            styled_snapshot,
             use_container_width=True,
             hide_index=True,
             height=min(560, 42 + 35 * len(snapshot)),
             column_config={
                 "Pin": st.column_config.TextColumn("", width="small"),
                 "Ticker": st.column_config.TextColumn("Ticker", width="small"),
-                "Price": st.column_config.NumberColumn("Price", format="$%.2f"),
-                "Day %": st.column_config.NumberColumn("Day", format="%+.2f%%"),
+                "Price": st.column_config.NumberColumn("Price"),
+                "Day %": st.column_config.NumberColumn("Day"),
                 "Signal": st.column_config.TextColumn("Signal", width="medium"),
                 "AI": st.column_config.TextColumn("AI", width="medium"),
                 "Score": st.column_config.NumberColumn("Score", format="%.0f"),
@@ -148,8 +179,10 @@ def render():
     st.markdown("### Investment Cards · Edit & Details")
     for row in filtered:
         price_text = money(row.get("price"))
-        day_text = "" if row.get("daily_pct") is None else f" · {row['daily_pct']:+.2f}%"
-        title = f"{'★' if row.get('pinned') else '☆'} {row['ticker']} · {price_text}{day_text} · {row['signal']}"
+        daily_pct = row.get("daily_pct")
+        day_text = "" if daily_pct is None else f" · {daily_pct:+.2f}%"
+        direction = "⚪" if daily_pct is None or daily_pct == 0 else ("🔴" if daily_pct > 0 else "🔵")
+        title = f"{direction} {'★' if row.get('pinned') else '☆'} {row['ticker']} · {price_text}{day_text} · {row['signal']}"
         with st.expander(title, expanded=False):
             m = st.columns(6)
             m[0].metric("Price", money(row.get("price")), None if row.get("daily_pct") is None else f"{row['daily_pct']:+.2f}%")
