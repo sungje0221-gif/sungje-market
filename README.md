@@ -56,3 +56,12 @@ This build starts the Investment OS 1.0 redesign:
 - Rebuilt Command Center hierarchy
 - Personalized opportunity list including SKHY and VXF
 - Safer dashboard fallbacks when market-data calls fail
+
+## v0.92 Command Center Upgrade
+
+- Compact terminal-style market header
+- Six live signal cards with one-month sparklines
+- BUY / HOLD / AVOID / WATCH playbook
+- Personal watchlist radar for VOO, VXF, GOOGL, CEG, SKHY, KORU, QQQM and SMH
+- Market regime indicator and redesigned AI decision context
+- Responsive desktop/tablet layout

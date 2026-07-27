@@ -1,5 +1,5 @@
 import streamlit as st
-from components.theme import inject_theme
+from components.theme import inject_dashboard_v092, inject_theme
 from components.sidebar import render_sidebar
 from pages.command_center import render as render_command_center
 from pages.market_overview import render as render_market_overview
@@ -23,6 +23,7 @@ st.set_page_config(
 )
 
 inject_theme()
+inject_dashboard_v092()
 page = render_sidebar()
 
 ROUTES = {
