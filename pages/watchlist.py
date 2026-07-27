@@ -5,7 +5,7 @@ from components.cards import stars
 from components.colored_tables import style_signed_columns
 from components.charts import advanced_chart
 from engine.analysis import analyze
-from engine.fundamentals import days_to_earnings, ticker_info
+from engine.fundamentals import days_to_earnings, ticker_info, fundamental_score
 from engine.market_data import history, quote
 from utils.formatters import compact, money
 from utils.storage import load_json, save_json
@@ -58,7 +58,10 @@ def render():
             "Action": a["action"],
             "Risk": a["risk"],
             "RSI": a["rsi"],
+            "Bid": q.get("bid"),
+            "Ask": q.get("ask"),
             "Volume": q["volume"],
+            "Source": q.get("source"),
             "Earnings D-Day": days_to_earnings(ticker),
         })
 
@@ -135,6 +138,14 @@ def render():
     )
 
     st.markdown("### Fundamentals")
+    fscore = fundamental_score(info)
+    score_col, label_col = st.columns([1, 5])
+    score_col.metric("Fundamental Score", f'{fscore["score"]:.0f}/100')
+    label_col.markdown(
+        f'<div class="panel"><b>{fscore["label"]}</b> · '
+        'Yahoo가 일부 항목을 누락할 경우 이용 가능한 항목만으로 계산됩니다.</div>',
+        unsafe_allow_html=True,
+    )
     f = st.columns(8)
     f[0].metric("Market Cap", compact(info.get("marketCap")))
     f[1].metric("Trailing P/E", "—" if info.get("trailingPE") is None else f'{info.get("trailingPE"):.1f}')

@@ -133,3 +133,52 @@ def gauge(value, title, max_value=100):
     ))
     fig.update_layout(height=220, margin=dict(l=20, r=20, t=45, b=15), paper_bgcolor="#0c1828")
     return fig
+
+
+def stock_heatmap(df, title="Market Heat Map"):
+    if df.empty:
+        fig = go.Figure()
+        fig.update_layout(title=title, template="plotly_dark", height=650)
+        return fig
+
+    values = df["Weight"].fillna(1).clip(lower=0.01)
+    changes = df["Change %"].fillna(0)
+    sectors = df["Sector"].fillna("Other") if "Sector" in df.columns else pd.Series([""] * len(df))
+
+    fig = go.Figure(go.Treemap(
+        labels=df["Ticker"],
+        parents=sectors,
+        values=values,
+        branchvalues="total",
+        marker=dict(
+            colors=changes,
+            colorscale=[
+                [0.00, "#8B1E2D"],
+                [0.35, "#C94B58"],
+                [0.49, "#5B6472"],
+                [0.51, "#5B6472"],
+                [0.65, "#2D8A70"],
+                [1.00, "#0E5F4D"],
+            ],
+            cmid=0,
+            colorbar=dict(title="Daily %"),
+        ),
+        text=changes.map(lambda x: f"{x:+.2f}%"),
+        customdata=df[["Price"]].to_numpy(),
+        texttemplate="<b>%{label}</b><br>%{text}",
+        hovertemplate=(
+            "<b>%{label}</b><br>"
+            "Price: $%{customdata[0]:,.2f}<br>"
+            "Daily: %{color:+.2f}%<extra></extra>"
+        ),
+        pathbar=dict(visible=True),
+    ))
+    fig.update_layout(
+        title=title,
+        height=700,
+        margin=dict(l=4, r=4, t=42, b=4),
+        paper_bgcolor="#0c1828",
+        plot_bgcolor="#0c1828",
+        template="plotly_dark",
+    )
+    return fig

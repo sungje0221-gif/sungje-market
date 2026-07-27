@@ -9,10 +9,18 @@ def inject_theme():
       border-right:1px solid rgba(255,255,255,.07);
       min-width:250px;
     }
-    .block-container {max-width:1700px;padding-top:1rem;padding-bottom:2rem;}
+    .block-container {
+      max-width:1700px;
+      padding-top:3.25rem !important;
+      padding-bottom:2rem;
+    }
+    [data-testid="stAppViewContainer"] > .main {
+      overflow:visible;
+    }
     h1,h2,h3 {letter-spacing:-.03em;}
     .hero {
-      padding:20px 24px;border-radius:18px;margin-bottom:16px;
+      padding:22px 24px;border-radius:18px;margin:0 0 16px 0;
+      min-height:96px;overflow:visible;
       background:linear-gradient(135deg,rgba(30,64,175,.22),rgba(15,118,110,.15));
       border:1px solid rgba(96,165,250,.2);
     }

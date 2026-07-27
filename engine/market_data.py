@@ -1,24 +1,142 @@
-import pandas as pd,streamlit as st,yfinance as yf
+from __future__ import annotations
 
-@st.cache_data(ttl=300,show_spinner=False)
-def history(ticker,period="6mo",interval="1d"):
+from typing import Any
+
+import pandas as pd
+import requests
+import streamlit as st
+import yfinance as yf
+
+from engine.schwab import SchwabError, access_token, connection_status
+
+SCHWAB_MARKETDATA_BASE_URL = "https://api.schwabapi.com/marketdata/v1"
+
+
+def _normalize_download(data: pd.DataFrame) -> pd.DataFrame:
+    if isinstance(data.columns, pd.MultiIndex):
+        data.columns = data.columns.get_level_values(0)
+    return data.dropna(how="all")
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def history(ticker: str, period: str = "6mo", interval: str = "1d") -> pd.DataFrame:
     try:
-        d=yf.download(ticker,period=period,interval=interval,auto_adjust=False,progress=False,threads=False)
-        if isinstance(d.columns,pd.MultiIndex):d.columns=d.columns.get_level_values(0)
-        return d.dropna(how="all")
-    except:return pd.DataFrame()
+        data = yf.download(
+            ticker,
+            period=period,
+            interval=interval,
+            auto_adjust=False,
+            progress=False,
+            threads=False,
+        )
+        return _normalize_download(data)
+    except Exception:
+        return pd.DataFrame()
 
-@st.cache_data(ttl=180,show_spinner=False)
-def quote(ticker):
-    d=history(ticker,"5d","1d")
-    if d.empty or "Close" not in d:return {"price":None,"change_pct":None,"volume":None}
-    c=d["Close"].dropna()
-    if c.empty:return {"price":None,"change_pct":None,"volume":None}
-    price=float(c.iloc[-1]);prev=float(c.iloc[-2]) if len(c)>1 else price
-    volume=float(d["Volume"].dropna().iloc[-1]) if "Volume" in d and not d["Volume"].dropna().empty else None
-    return {"price":price,"change_pct":((price/prev)-1)*100 if prev else 0,"volume":volume}
 
-@st.cache_data(ttl=900,show_spinner=False)
-def info(ticker):
-    try:return yf.Ticker(ticker).fast_info
-    except:return {}
+def _schwab_quote(ticker: str) -> dict[str, Any] | None:
+    if not connection_status().get("connected"):
+        return None
+    try:
+        response = requests.get(
+            f"{SCHWAB_MARKETDATA_BASE_URL}/quotes",
+            params={"symbols": ticker, "fields": "quote,reference"},
+            headers={
+                "Authorization": f"Bearer {access_token()}",
+                "Accept": "application/json",
+            },
+            timeout=15,
+        )
+        if not response.ok:
+            return None
+        payload = response.json()
+        item = payload.get(ticker) or payload.get(ticker.upper())
+        if not isinstance(item, dict):
+            return None
+
+        quote_data = item.get("quote", {}) or {}
+        reference = item.get("reference", {}) or {}
+        price = (
+            quote_data.get("lastPrice")
+            or quote_data.get("mark")
+            or quote_data.get("closePrice")
+        )
+        previous_close = (
+            quote_data.get("closePrice")
+            or reference.get("previousClose")
+        )
+        net_pct = quote_data.get("netPercentChange")
+        if net_pct is None and price is not None and previous_close:
+            net_pct = (float(price) / float(previous_close) - 1) * 100
+
+        return {
+            "price": float(price) if price is not None else None,
+            "change_pct": float(net_pct) if net_pct is not None else None,
+            "volume": quote_data.get("totalVolume"),
+            "bid": quote_data.get("bidPrice"),
+            "ask": quote_data.get("askPrice"),
+            "last": quote_data.get("lastPrice"),
+            "mark": quote_data.get("mark"),
+            "source": "Schwab",
+        }
+    except (requests.RequestException, SchwabError, ValueError, TypeError):
+        return None
+
+
+@st.cache_data(ttl=30, show_spinner=False)
+def quote(ticker: str) -> dict[str, Any]:
+    schwab = _schwab_quote(ticker)
+    if schwab and schwab.get("price") is not None:
+        return schwab
+
+    data = history(ticker, "5d", "1d")
+    if data.empty or "Close" not in data:
+        return {
+            "price": None,
+            "change_pct": None,
+            "volume": None,
+            "bid": None,
+            "ask": None,
+            "last": None,
+            "mark": None,
+            "source": "Unavailable",
+        }
+
+    close = data["Close"].dropna()
+    if close.empty:
+        return {
+            "price": None,
+            "change_pct": None,
+            "volume": None,
+            "bid": None,
+            "ask": None,
+            "last": None,
+            "mark": None,
+            "source": "Unavailable",
+        }
+
+    price = float(close.iloc[-1])
+    previous = float(close.iloc[-2]) if len(close) > 1 else price
+    volume = (
+        float(data["Volume"].dropna().iloc[-1])
+        if "Volume" in data and not data["Volume"].dropna().empty
+        else None
+    )
+    return {
+        "price": price,
+        "change_pct": ((price / previous) - 1) * 100 if previous else 0,
+        "volume": volume,
+        "bid": None,
+        "ask": None,
+        "last": price,
+        "mark": price,
+        "source": "Yahoo Finance",
+    }
+
+
+@st.cache_data(ttl=900, show_spinner=False)
+def info(ticker: str):
+    try:
+        return dict(yf.Ticker(ticker).fast_info)
+    except Exception:
+        return {}

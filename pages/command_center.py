@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import pandas as pd,streamlit as st
 from components.cards import card,badge,stars
 from components.charts import sector_treemap,gauge
@@ -13,9 +15,10 @@ SECTORS={"Technology":"XLK","Communication":"XLC","Consumer Cyclical":"XLY","Fin
 WATCH=["GOOGL","META","MSFT","AAPL","NVDA","AMZN","TSLA","CEG"]
 
 def render():
-    st.markdown("""<div class="hero"><div class="hero-kicker">Personal Investment Operating System</div>
+    now_text = datetime.now().strftime("%A, %B %d · %I:%M:%S %p")
+    st.markdown(f"""<div class="hero"><div class="hero-kicker">Personal Investment Operating System</div>
     <div class="hero-title">Good Morning, Sungje ☀️</div>
-    <div class="hero-sub">Your market command center for intelligent investing</div></div>""",unsafe_allow_html=True)
+    <div class="hero-sub">Your market command center for intelligent investing · Updated {now_text}</div></div>""",unsafe_allow_html=True)
 
     spy=history("SPY","6mo");qqq=history("QQQ","6mo")
     score=round((trend_score(spy)+trend_score(qqq))/2,1)
@@ -34,6 +37,26 @@ def render():
     ]
     for c,it in zip(cols,items):
         with c:card(*it)
+
+    st.markdown("### Today's Playbook")
+    playbook = []
+    if score < 45:
+        playbook.append("시장 점수가 낮습니다. 신규 매수는 평소 계획의 25~50%만 실행하세요.")
+    elif score < 60:
+        playbook.append("중립 구간입니다. 강한 종목만 1차 분할하고 추격매수는 피하세요.")
+    else:
+        playbook.append("시장 추세가 우호적입니다. 코어·리더 종목의 계획된 분할매수가 가능합니다.")
+    if (vix["price"] or 0) >= 25:
+        playbook.append("VIX가 높습니다. 레버리지와 단일 종목 집중도를 줄이세요.")
+    if (ten["change_pct"] or 0) < 0:
+        playbook.append("10년물 금리가 하락 중이라 성장주에는 상대적으로 우호적입니다.")
+    if (oil["change_pct"] or 0) <= -3:
+        playbook.append("유가가 크게 하락 중입니다. 에너지 약세와 소비·운송 비용 개선을 함께 확인하세요.")
+
+    cols_play = st.columns(min(4, len(playbook)))
+    for i, message in enumerate(playbook[:4]):
+        with cols_play[i]:
+            st.markdown(f'<div class="panel" style="min-height:118px"><b>{i+1}</b><br>{message}</div>', unsafe_allow_html=True)
 
     st.write("")
     left,right=st.columns([1.5,1])
