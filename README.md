@@ -1,4 +1,4 @@
-# Sungje Investment OS v1.00
+# Sungje Investment OS v1.01
 
 개인 투자 대시보드의 완결판입니다. Streamlit Cloud에서 실행하도록 구성되어 있습니다.
 

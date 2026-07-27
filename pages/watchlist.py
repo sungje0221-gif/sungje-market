@@ -8,7 +8,7 @@ from engine.analysis import analyze
 from engine.fundamentals import days_to_earnings, ticker_info, fundamental_score
 from engine.market_data import history, quote
 from utils.formatters import compact, money
-from utils.storage import load_json, save_json
+from utils.watchlist_store import load_watchlist, save_watchlist
 
 DEFAULT = ["GOOGL","META","AMZN","MSFT","AAPL","NVDA","AVGO","SMH","CEG","VRT","ETN","ANET","SKHY","SPCX"]
 
@@ -35,14 +35,15 @@ def period_return(df):
 
 def render():
     st.title("Watchlist & Advanced Chart")
-    tickers = load_json("watchlist.json", DEFAULT)
+    st.caption("추가한 종목은 이 브라우저에 자동 저장되어 새로고침·앱 재시작·재배포 후에도 복원됩니다.")
+    tickers = load_watchlist(DEFAULT)
 
     c1, c2 = st.columns([5, 1])
     new = c1.text_input("Add ticker", placeholder="GOOGL").strip().upper()
     if c2.button("Add", use_container_width=True) and new:
         if new not in tickers:
             tickers.append(new)
-            save_json("watchlist.json", tickers)
+            save_watchlist(tickers)
             st.rerun()
 
     rows = []
@@ -164,5 +165,5 @@ def render():
     c4.metric("Resistance", money(a["resistance"]))
 
     if st.button(f"Remove {selected}"):
-        save_json("watchlist.json", [x for x in tickers if x != selected])
+        save_watchlist([x for x in tickers if x != selected])
         st.rerun()
