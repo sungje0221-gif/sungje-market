@@ -46,3 +46,13 @@ redirect_uri = "YOUR_CALLBACK_URL"
 to Streamlit Cloud Secrets after Schwab approves the app.
 
 Never commit real Schwab credentials or tokens to GitHub.
+
+## Investment OS 1.0 — Part 1A
+
+This build starts the Investment OS 1.0 redesign:
+
+- New grouped navigation sidebar
+- New OS 1.0 visual system and responsive layout
+- Rebuilt Command Center hierarchy
+- Personalized opportunity list including SKHY and VXF
+- Safer dashboard fallbacks when market-data calls fail
