@@ -136,18 +136,45 @@ def gauge(value, title, max_value=100):
 
 
 def stock_heatmap(df, title="Market Heat Map"):
-    if df.empty:
+    """Build a Plotly treemap from a normalized market snapshot.
+
+    The normalization step intentionally converts Series to plain Python lists.
+    This avoids Plotly/Streamlit Cloud compatibility issues and guards against
+    duplicate column names (for example, renaming Sector to Ticker when a
+    Ticker column already exists).
+    """
+    required = {"Ticker", "Change %"}
+    if df is None or df.empty or not required.issubset(df.columns):
         fig = go.Figure()
         fig.update_layout(title=title, template="plotly_dark", height=650)
         return fig
 
-    values = df["Weight"].fillna(1).clip(lower=0.01)
-    changes = df["Change %"].fillna(0)
-    sectors = df["Sector"].fillna("Other") if "Sector" in df.columns else pd.Series([""] * len(df))
+    clean = df.loc[:, ~df.columns.duplicated()].copy()
+    clean["Ticker"] = clean["Ticker"].astype(str).str.strip()
+    clean = clean[clean["Ticker"].ne("") & clean["Ticker"].ne("nan")]
+
+    clean["Price"] = pd.to_numeric(clean.get("Price", 0), errors="coerce").fillna(0.0)
+    clean["Change %"] = pd.to_numeric(clean["Change %"], errors="coerce").fillna(0.0)
+    clean["Weight"] = pd.to_numeric(clean.get("Weight", 1), errors="coerce").fillna(1.0).clip(lower=0.01)
+    if "Sector" not in clean.columns:
+        clean["Sector"] = "Market"
+    clean["Sector"] = clean["Sector"].fillna("Market").astype(str)
+
+    if clean.empty:
+        fig = go.Figure()
+        fig.update_layout(title=title, template="plotly_dark", height=650)
+        return fig
+
+    labels = clean["Ticker"].tolist()
+    parents = clean["Sector"].tolist()
+    values = clean["Weight"].astype(float).tolist()
+    changes = clean["Change %"].astype(float).tolist()
+    prices = clean[["Price"]].to_numpy()
+    change_text = [f"{value:+.2f}%" for value in changes]
 
     fig = go.Figure(go.Treemap(
-        labels=df["Ticker"],
-        parents=sectors,
+        labels=labels,
+        parents=parents,
         values=values,
         branchvalues="total",
         marker=dict(
@@ -163,8 +190,8 @@ def stock_heatmap(df, title="Market Heat Map"):
             cmid=0,
             colorbar=dict(title="Daily %"),
         ),
-        text=changes.map(lambda x: f"{x:+.2f}%"),
-        customdata=df[["Price"]].to_numpy(),
+        text=change_text,
+        customdata=prices,
         texttemplate="<b>%{label}</b><br>%{text}",
         hovertemplate=(
             "<b>%{label}</b><br>"

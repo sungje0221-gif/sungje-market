@@ -89,7 +89,7 @@ def _stat_card(label, value, note, tone="blue"):
 
 
 def render():
-    st.markdown('<div class="page-kicker">LIVE MARKET MAP · VERSION 0.93</div>', unsafe_allow_html=True)
+    st.markdown('<div class="page-kicker">LIVE MARKET MAP · VERSION 0.94</div>', unsafe_allow_html=True)
     st.title("Market Heatmap")
     st.caption("시가총액, 등락률, 시장 폭과 섹터 순환을 한 화면에서 확인합니다. 데이터는 Yahoo Finance 기준입니다.")
 
@@ -161,13 +161,23 @@ def render():
                          column_config={"Price": st.column_config.NumberColumn(format="$%.2f"), "Change %": st.column_config.NumberColumn(format="%+.2f%%")})
 
     with tab_sectors:
-        st.plotly_chart(stock_heatmap(
-            sector_df.rename(columns={"Sector": "Ticker"}).assign(Weight=1, Sector="US Sectors"),
-            "US Sector Rotation"
-        ), use_container_width=True, config={"displaylogo": False})
-        st.plotly_chart(market_breadth_bar(
-            sector_df.rename(columns={"Sector": "Ticker"})
-        ), use_container_width=True, config={"displayModeBar": False})
+        sector_map_df = pd.DataFrame({
+            "Ticker": sector_df["Sector"],
+            "Price": sector_df["Price"],
+            "Change %": sector_df["Change %"],
+            "Weight": 1.0,
+            "Sector": "US Sectors",
+        })
+        st.plotly_chart(
+            stock_heatmap(sector_map_df, "US Sector Rotation"),
+            use_container_width=True,
+            config={"displaylogo": False},
+        )
+        st.plotly_chart(
+            market_breadth_bar(sector_map_df),
+            use_container_width=True,
+            config={"displayModeBar": False},
+        )
         st.dataframe(valid_sector, use_container_width=True, hide_index=True,
                      column_config={"Price": st.column_config.NumberColumn(format="$%.2f"), "Change %": st.column_config.ProgressColumn(min_value=-5, max_value=5, format="%+.2f%%")})
 

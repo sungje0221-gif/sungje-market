@@ -16,7 +16,7 @@ from pages.settings import render as render_settings
 from pages.schwab_connect import render as render_schwab_connect
 
 st.set_page_config(
-    page_title="Sungje Investment OS v0.93",
+    page_title="Sungje Investment OS v0.94",
     page_icon="📈",
     layout="wide",
     initial_sidebar_state="expanded",
