@@ -1,5 +1,5 @@
 import streamlit as st
-from components.theme import inject_dashboard_v092, inject_heatmap_v093, inject_theme
+from components.theme import inject_dashboard_v092, inject_heatmap_v093, inject_theme, inject_v098
 from components.sidebar import render_sidebar
 from pages.command_center import render as render_command_center
 from pages.market_overview import render as render_market_overview
@@ -16,7 +16,7 @@ from pages.settings import render as render_settings
 from pages.schwab_connect import render as render_schwab_connect
 
 st.set_page_config(
-    page_title="Sungje Investment OS v0.96",
+    page_title="Sungje Investment OS v0.98",
     page_icon="📈",
     layout="wide",
     initial_sidebar_state="auto",
@@ -25,6 +25,7 @@ st.set_page_config(
 inject_theme()
 inject_dashboard_v092()
 inject_heatmap_v093()
+inject_v098()
 page = render_sidebar()
 
 ROUTES = {

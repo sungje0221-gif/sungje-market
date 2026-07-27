@@ -204,3 +204,22 @@ def inject_heatmap_v093() -> None:
         """,
         unsafe_allow_html=True,
     )
+
+
+def inject_v098() -> None:
+    st.markdown(
+        """
+        <style>
+        .advisor-signal{border-radius:14px;padding:15px;background:linear-gradient(180deg,rgba(14,30,49,.98),rgba(7,18,31,.98));border:1px solid var(--os-border)}
+        @media(max-width:760px){
+          [data-testid="stSidebar"]{min-width:245px}
+          .block-container{padding-left:.72rem!important;padding-right:.72rem!important}
+          .hero-market-strip{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+          .signal-value{font-size:21px!important}.watch-price{font-size:19px!important}
+          [data-testid="column"]{min-width:100%!important;flex:1 1 100%!important}
+          [data-testid="stPlotlyChart"]>div{min-height:420px}
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
