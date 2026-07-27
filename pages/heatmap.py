@@ -89,7 +89,7 @@ def _stat_card(label, value, note, tone="blue"):
 
 
 def render():
-    st.markdown('<div class="page-kicker">LIVE MARKET MAP · VERSION 0.94</div>', unsafe_allow_html=True)
+    st.markdown('<div class="page-kicker">LIVE MARKET MAP · VERSION 0.95</div>', unsafe_allow_html=True)
     st.title("Market Heatmap")
     st.caption("시가총액, 등락률, 시장 폭과 섹터 순환을 한 화면에서 확인합니다. 데이터는 Yahoo Finance 기준입니다.")
 

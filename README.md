@@ -1,6 +1,6 @@
-# Sungje Investment OS v0.94
+# Sungje Investment OS v0.95
 
-## v0.94
+## v0.95
 - Rebuilt Market Heatmap
 - Stock, sector rotation, and performance-matrix tabs
 - Market breadth and relative-strength ranking

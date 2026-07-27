@@ -136,12 +136,11 @@ def gauge(value, title, max_value=100):
 
 
 def stock_heatmap(df, title="Market Heat Map"):
-    """Build a Plotly treemap from a normalized market snapshot.
+    """Render a stable flat treemap for Streamlit Cloud.
 
-    The normalization step intentionally converts Series to plain Python lists.
-    This avoids Plotly/Streamlit Cloud compatibility issues and guards against
-    duplicate column names (for example, renaming Sector to Ticker when a
-    Ticker column already exists).
+    A flat treemap is intentional here. The previous hierarchical version used
+    sector names as parents without creating matching parent nodes, which could
+    leave Plotly showing only the color bar and an empty chart area.
     """
     required = {"Ticker", "Change %"}
     if df is None or df.empty or not required.issubset(df.columns):
@@ -166,17 +165,15 @@ def stock_heatmap(df, title="Market Heat Map"):
         return fig
 
     labels = clean["Ticker"].tolist()
-    parents = clean["Sector"].tolist()
     values = clean["Weight"].astype(float).tolist()
     changes = clean["Change %"].astype(float).tolist()
-    prices = clean[["Price"]].to_numpy()
+    customdata = clean[["Price", "Sector"]].to_numpy()
     change_text = [f"{value:+.2f}%" for value in changes]
 
     fig = go.Figure(go.Treemap(
         labels=labels,
-        parents=parents,
+        parents=[""] * len(labels),
         values=values,
-        branchvalues="total",
         marker=dict(
             colors=changes,
             colorscale=[
@@ -189,16 +186,19 @@ def stock_heatmap(df, title="Market Heat Map"):
             ],
             cmid=0,
             colorbar=dict(title="Daily %"),
+            line=dict(width=1, color="#071321"),
         ),
         text=change_text,
-        customdata=prices,
+        customdata=customdata,
         texttemplate="<b>%{label}</b><br>%{text}",
         hovertemplate=(
             "<b>%{label}</b><br>"
             "Price: $%{customdata[0]:,.2f}<br>"
+            "Sector: %{customdata[1]}<br>"
             "Daily: %{color:+.2f}%<extra></extra>"
         ),
-        pathbar=dict(visible=True),
+        pathbar=dict(visible=False),
+        tiling=dict(packing="squarify", pad=2),
     ))
     fig.update_layout(
         title=title,
@@ -209,7 +209,6 @@ def stock_heatmap(df, title="Market Heat Map"):
         template="plotly_dark",
     )
     return fig
-
 
 def market_breadth_bar(df):
     """Horizontal performance ranking used beneath heatmaps."""
