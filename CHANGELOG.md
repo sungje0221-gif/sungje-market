@@ -1,6 +1,6 @@
 # Changelog
 
-## v2.04
+## v2.05
 - Heatmap 종목 클릭 시 상세 패널 표시
 - 현재가, 등락률, 시가총액, P/E, 52주 범위, 거래량 표시
 - 6개월 가격 차트와 기본 펀더멘털 표시
@@ -26,3 +26,11 @@
 - Added search, tag filtering and multiple sorting modes.
 - Added automatic migration from the old ticker-only watchlist format.
 - Added Supabase SQL setup script and secrets template.
+
+
+## v2.05
+- Watchlist colors now follow U.S. market convention: green up, red down.
+- Earnings Radar now reads the Supabase-backed Watchlist Pro records.
+- Added robust earnings-date fallbacks for newer yfinance response formats.
+- News now uses Yahoo Finance Search first and yfinance as a fallback.
+- News and earnings failures now show useful status messages instead of silently returning empty data.

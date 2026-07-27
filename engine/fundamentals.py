@@ -58,29 +58,58 @@ def ticker_info(ticker: str) -> dict[str, Any]:
     return result
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
+@st.cache_data(ttl=1800, show_spinner=False)
 def earnings_calendar(ticker: str) -> dict[str, Any]:
+    """Return a normalized earnings calendar across yfinance response formats."""
+    t = yf.Ticker(ticker)
     try:
-        calendar = yf.Ticker(ticker).calendar
-        return calendar if isinstance(calendar, dict) else {}
+        calendar = t.calendar
+        if isinstance(calendar, dict):
+            return calendar
+        if isinstance(calendar, pd.DataFrame) and not calendar.empty:
+            # yfinance has returned both row- and column-oriented DataFrames.
+            if "Earnings Date" in calendar.index:
+                values = calendar.loc["Earnings Date"].dropna().tolist()
+                return {"Earnings Date": values}
+            if "Earnings Date" in calendar.columns:
+                values = calendar["Earnings Date"].dropna().tolist()
+                return {"Earnings Date": values}
     except Exception:
-        return {}
+        pass
+
+    # More reliable fallback used by newer yfinance versions.
+    try:
+        dates = t.get_earnings_dates(limit=8)
+        if isinstance(dates, pd.DataFrame) and not dates.empty:
+            values = list(dates.index)
+            return {"Earnings Date": values}
+    except Exception:
+        pass
+    return {}
 
 
 def next_earnings_date(ticker: str):
     calendar = earnings_calendar(ticker)
     value = calendar.get("Earnings Date")
-    if isinstance(value, list) and value:
-        value = value[0]
-    if value is None:
+    values = value if isinstance(value, (list, tuple, pd.Index)) else [value]
+    now = pd.Timestamp.now(tz="UTC")
+    candidates = []
+    for raw in values:
+        if raw is None:
+            continue
+        try:
+            ts = pd.Timestamp(raw)
+            if ts.tzinfo is None:
+                ts = ts.tz_localize("UTC")
+            else:
+                ts = ts.tz_convert("UTC")
+            candidates.append(ts)
+        except Exception:
+            continue
+    if not candidates:
         return None
-    try:
-        ts = pd.Timestamp(value)
-        if ts.tzinfo is None:
-            ts = ts.tz_localize("UTC")
-        return ts
-    except Exception:
-        return None
+    future = sorted(ts for ts in candidates if ts.normalize() >= now.normalize())
+    return future[0] if future else sorted(candidates)[-1]
 
 
 def days_to_earnings(ticker: str):

@@ -127,9 +127,9 @@ def render():
             if pd.isna(value):
                 return ""
             if value > 0:
-                return "color: #ff5c7a; font-weight: 800;"
+                return "color: #22c55e; font-weight: 800;"
             if value < 0:
-                return "color: #4da3ff; font-weight: 800;"
+                return "color: #ef4444; font-weight: 800;"
             return "color: #a9b7c9; font-weight: 700;"
 
         def _row_market_color(row):
@@ -137,9 +137,9 @@ def render():
             if pd.isna(change):
                 color = "#e8eef7"
             elif change > 0:
-                color = "#ff5c7a"
+                color = "#22c55e"
             elif change < 0:
-                color = "#4da3ff"
+                color = "#ef4444"
             else:
                 color = "#a9b7c9"
             styles = pd.Series("", index=row.index)
@@ -153,7 +153,7 @@ def render():
             .apply(_row_market_color, axis=1)
             .format({"Price": "${:,.2f}", "Day %": "{:+.2f}%", "Score": "{:.0f}", "RSI": "{:.1f}", "Target": "${:,.2f}", "Stop": "${:,.2f}"}, na_rep="—")
         )
-        st.caption("당일 상승은 빨강, 하락은 파랑으로 표시됩니다.")
+        st.caption("당일 상승은 초록, 하락은 빨강으로 표시됩니다.")
         st.dataframe(
             styled_snapshot,
             use_container_width=True,
@@ -181,7 +181,7 @@ def render():
         price_text = money(row.get("price"))
         daily_pct = row.get("daily_pct")
         day_text = "" if daily_pct is None else f" · {daily_pct:+.2f}%"
-        direction = "⚪" if daily_pct is None or daily_pct == 0 else ("🔴" if daily_pct > 0 else "🔵")
+        direction = "⚪" if daily_pct is None or daily_pct == 0 else ("🟢" if daily_pct > 0 else "🔴")
         title = f"{direction} {'★' if row.get('pinned') else '☆'} {row['ticker']} · {price_text}{day_text} · {row['signal']}"
         with st.expander(title, expanded=False):
             m = st.columns(6)

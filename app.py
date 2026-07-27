@@ -18,7 +18,7 @@ from pages.schwab_connect import render as render_schwab_connect
 from pages.settings import render as render_settings
 from pages.watchlist import render as render_watchlist
 
-APP_VERSION = "2.04"
+APP_VERSION = "2.05"
 
 st.set_page_config(
     page_title=f"Sungje Investment OS v{APP_VERSION}",
