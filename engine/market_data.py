@@ -191,3 +191,33 @@ def batch_quotes(tickers: tuple[str, ...]) -> dict[str, dict[str, Any]]:
     except Exception:
         return results
     return results
+
+@st.cache_data(ttl=300, show_spinner=False)
+def batch_history(tickers: tuple[str, ...], period: str = "1y", interval: str = "1d") -> dict[str, pd.DataFrame]:
+    """Download price history for many symbols in one Yahoo request."""
+    symbols = tuple(dict.fromkeys(str(t).strip().upper() for t in tickers if str(t).strip()))
+    out = {ticker: pd.DataFrame() for ticker in symbols}
+    if not symbols:
+        return out
+    try:
+        data = yf.download(
+            list(symbols), period=period, interval=interval, auto_adjust=False,
+            progress=False, threads=True, group_by="column",
+        )
+        if data is None or data.empty:
+            return out
+        if len(symbols) == 1:
+            out[symbols[0]] = _normalize_download(data.copy())
+            return out
+        if not isinstance(data.columns, pd.MultiIndex):
+            return out
+        ticker_level = 1 if set(symbols).intersection(set(map(str, data.columns.get_level_values(1)))) else 0
+        for ticker in symbols:
+            try:
+                frame = data.xs(ticker, axis=1, level=ticker_level, drop_level=True).dropna(how="all")
+                out[ticker] = frame
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return out

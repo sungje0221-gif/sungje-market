@@ -1,256 +1,110 @@
-import pandas as pd
+from __future__ import annotations
+
 import streamlit as st
 
 from components.cards import stars
 from components.charts import advanced_chart
 from engine.analysis import analyze
-from engine.fundamentals import days_to_earnings, ticker_info, fundamental_score
-from engine.market_data import history, quote
+from engine.fundamentals import days_to_earnings, fundamental_score, ticker_info
+from engine.market_data import batch_quotes, history, quote
 from utils.formatters import compact, money
-from utils.watchlist_store import (
-    delete_watchlist_item,
-    load_watchlist_data,
-    save_watchlist_data,
-    storage_status,
-)
+from utils.watchlist_store import delete_watchlist_item, load_watchlist_data, save_watchlist_data, storage_status
 
 DEFAULT = ["GOOGL","META","AMZN","MSFT","AAPL","NVDA","AVGO","SMH","CEG","VRT","ETN","ANET","SKHY","SPCX"]
 TAGS = ["Watch", "Long-term", "Swing", "Trade", "ETF", "AI", "Dividend", "High Risk"]
-PERIODS = {"1D": ("1d", "5m"), "5D": ("5d", "15m"), "1M": ("1mo", "1h"), "3M": ("3mo", "1d"), "6M": ("6mo", "1d"), "YTD": ("ytd", "1d"), "1Y": ("1y", "1d"), "5Y": ("5y", "1wk")}
+PERIODS = {"1M": ("1mo", "1d"), "3M": ("3mo", "1d"), "6M": ("6mo", "1d"), "1Y": ("1y", "1d"), "5Y": ("5y", "1wk")}
 
 
-def period_return(df):
-    if df.empty or "Close" not in df:
-        return None
-    close = df["Close"].dropna()
-    return None if len(close) < 2 else (float(close.iloc[-1]) / float(close.iloc[0]) - 1) * 100
+def _color(value: float | None) -> str:
+    if value is None: return "#a9b7c9"
+    return "#45a3ff" if value >= 0 else "#ff5b6e"
 
 
-def _signal(price, target, stop, action):
-    if price is not None and stop is not None and price <= stop:
-        return "STOP ALERT"
-    if price is not None and target is not None and price <= target:
-        return "BUY ZONE"
-    return action or "WAIT"
+def _detail(ticker: str, records: list[dict]) -> None:
+    row = next((r for r in records if r["ticker"] == ticker), None)
+    if row is None: return
+    q = quote(ticker)
+    one_year = history(ticker, "1y", "1d")
+    a = analyze(one_year)
+    info = ticker_info(ticker)
+    st.markdown(f"## {ticker} · Details")
+    stats = st.columns(6)
+    stats[0].metric("Price", money(q.get("price")), None if q.get("change_pct") is None else f'{q["change_pct"]:+.2f}%')
+    stats[1].metric("AI", a.get("action", "—"))
+    stats[2].metric("Score", f'{a.get("score", 0):.0f}/100')
+    stats[3].metric("Rating", stars(a.get("score", 0)))
+    stats[4].metric("Target", money(row.get("target_price")))
+    stats[5].metric("Earnings", "—" if days_to_earnings(ticker) is None else f'D{days_to_earnings(ticker):+d}')
+
+    period_label = st.radio("Range", list(PERIODS), horizontal=True, index=3, key=f"range_{ticker}")
+    period, interval = PERIODS[period_label]
+    chart_df = history(ticker, period, interval)
+    if not chart_df.empty:
+        st.plotly_chart(advanced_chart(chart_df, ticker, show_ma20=True, show_ma50=True, show_ma100=False, show_ma200=True, show_bollinger=False, show_volume=True, show_rsi=True, show_macd=False), use_container_width=True)
+
+    with st.expander("Edit investment card", expanded=False):
+        with st.form(f"edit_{ticker}"):
+            c1, c2, c3, c4 = st.columns(4)
+            pinned = c1.toggle("Pinned", value=bool(row.get("pinned")))
+            tag = c2.selectbox("Tag", TAGS, index=TAGS.index(row.get("tag")) if row.get("tag") in TAGS else 0)
+            target = c3.number_input("Target / Buy", min_value=0.0, value=float(row.get("target_price") or 0), step=0.5)
+            stop = c4.number_input("Stop", min_value=0.0, value=float(row.get("stop_price") or 0), step=0.5)
+            memo = st.text_area("Memo / Investment thesis", value=row.get("memo", ""), height=80)
+            b1, b2 = st.columns([4, 1])
+            if b1.form_submit_button("Save", type="primary", use_container_width=True):
+                row.update({"pinned": pinned, "tag": tag, "target_price": target or None, "stop_price": stop or None, "memo": memo})
+                save_watchlist_data(records); st.rerun()
+            if b2.form_submit_button("Delete", use_container_width=True):
+                delete_watchlist_item(ticker, records); st.session_state.pop("watch_selected", None); st.rerun()
+
+    fscore = fundamental_score(info)
+    st.markdown("### Fundamentals")
+    f = st.columns(6)
+    f[0].metric("Fundamental", f'{fscore["score"]:.0f}/100')
+    f[1].metric("Market Cap", compact(info.get("marketCap")))
+    f[2].metric("Trailing P/E", "—" if info.get("trailingPE") is None else f'{info.get("trailingPE"):.1f}')
+    f[3].metric("Forward P/E", "—" if info.get("forwardPE") is None else f'{info.get("forwardPE"):.1f}')
+    f[4].metric("EPS", "—" if info.get("trailingEps") is None else f'${info.get("trailingEps"):.2f}')
+    f[5].metric("Target Mean", money(info.get("targetMeanPrice")))
 
 
-def render():
-    st.title("Watchlist Pro")
+def render() -> None:
+    st.title("Watchlist")
     mode, source = storage_status()
-    st.caption(f"{mode} · {source} · 종목, 메모, 목표가, 손절가, 태그가 모든 기기에서 동기화됩니다.")
-    sync_error = st.session_state.get("watchlist_sync_error")
-    if sync_error:
-        st.warning(f"Supabase 연결에 실패해 로컬 파일로 작동 중입니다: {sync_error}")
-
+    st.caption(f"{mode} · {source} · 카드 클릭 시 상세 차트와 편집 화면을 엽니다.")
     records = load_watchlist_data(DEFAULT)
     tickers = [r["ticker"] for r in records]
 
-    with st.expander("＋ Add ticker", expanded=not bool(records)):
-        c1, c2, c3 = st.columns([2, 1, 2])
-        new = c1.text_input("Ticker", placeholder="GOOGL").strip().upper()
+    with st.expander("＋ Add ticker", expanded=False):
+        c1, c2, c3 = st.columns([1.2, 1, 2])
+        new = c1.text_input("Ticker", placeholder="NVDA").strip().upper()
         tag = c2.selectbox("Tag", TAGS)
         memo = c3.text_input("Memo", placeholder="Why is this on my watchlist?")
-        c4, c5, c6 = st.columns(3)
-        target = c4.number_input("Target / Buy price", min_value=0.0, value=0.0, step=0.5)
-        stop = c5.number_input("Stop price", min_value=0.0, value=0.0, step=0.5)
-        pinned = c6.toggle("Pin to top", value=False)
-        if st.button("Add to Watchlist", type="primary", use_container_width=True) and new:
+        if st.button("Add", type="primary") and new:
             if new not in tickers:
-                records.append({"ticker": new, "pinned": pinned, "target_price": target or None, "stop_price": stop or None, "tag": tag, "memo": memo})
-                save_watchlist_data(records)
-                st.rerun()
-            else:
-                st.info(f"{new} is already in the watchlist.")
+                records.append({"ticker": new, "pinned": False, "target_price": None, "stop_price": None, "tag": tag, "memo": memo})
+                save_watchlist_data(records); st.rerun()
+            else: st.info(f"{new} is already in the watchlist.")
 
-    toolbar = st.columns([2, 1, 1, 1])
+    toolbar = st.columns([2, 1, 1])
     search = toolbar[0].text_input("Search", placeholder="Ticker or memo", label_visibility="collapsed").strip().lower()
-    tag_filter = toolbar[1].selectbox("Tag filter", ["All"] + TAGS, label_visibility="collapsed")
-    sort_by = toolbar[2].selectbox("Sort", ["Pinned", "Score", "Ticker", "Target proximity"], label_visibility="collapsed")
-    if toolbar[3].button("↻ Sync", use_container_width=True):
-        st.session_state.pop("watchlist_pro_records_v2", None)
-        load_watchlist_data(DEFAULT, force=True)
-        st.rerun()
+    tag_filter = toolbar[1].selectbox("Tag", ["All"] + TAGS, label_visibility="collapsed")
+    sort_by = toolbar[2].selectbox("Sort", ["Pinned", "Ticker", "Daily move"], label_visibility="collapsed")
+    filtered = [r for r in records if (not search or search in r["ticker"].lower() or search in r.get("memo", "").lower()) and (tag_filter == "All" or r.get("tag") == tag_filter)]
+    quotes = batch_quotes(tuple(r["ticker"] for r in filtered))
+    if sort_by == "Pinned": filtered.sort(key=lambda r: (not r.get("pinned", False), r["ticker"]))
+    elif sort_by == "Daily move": filtered.sort(key=lambda r: abs(float(quotes.get(r["ticker"], {}).get("change_pct") or 0)), reverse=True)
+    else: filtered.sort(key=lambda r: r["ticker"])
 
-    rows = []
-    for item in records:
-        ticker = item["ticker"]
-        q = quote(ticker)
-        a = analyze(history(ticker, "1y"))
-        price = q.get("price")
-        target_price = item.get("target_price")
-        proximity = abs(price - target_price) / price * 100 if price and target_price else 9999
-        rows.append({
-            **item,
-            "price": price,
-            "daily_pct": q.get("change_pct"),
-            "score": a.get("score"),
-            "action": a.get("action"),
-            "signal": _signal(price, target_price, item.get("stop_price"), a.get("action")),
-            "rsi": a.get("rsi"),
-            "earnings": days_to_earnings(ticker),
-            "proximity": proximity,
-        })
-
-    filtered = [r for r in rows if (not search or search in r["ticker"].lower() or search in r.get("memo", "").lower()) and (tag_filter == "All" or r.get("tag") == tag_filter)]
-    if sort_by == "Pinned":
-        filtered.sort(key=lambda x: (not x.get("pinned", False), x["ticker"]))
-    elif sort_by == "Score":
-        filtered.sort(key=lambda x: x.get("score") or -1, reverse=True)
-    elif sort_by == "Target proximity":
-        filtered.sort(key=lambda x: x["proximity"])
-    else:
-        filtered.sort(key=lambda x: x["ticker"])
-
-    st.markdown("### Watchlist Snapshot")
-    if not filtered:
-        st.info("No matching tickers.")
-    else:
-        snapshot = pd.DataFrame([
-            {
-                "Pin": "★" if row.get("pinned") else "☆",
-                "Ticker": row["ticker"],
-                "Price": row.get("price"),
-                "Day %": row.get("daily_pct"),
-                "Signal": row.get("signal") or "WAIT",
-                "AI": row.get("action") or "—",
-                "Score": row.get("score"),
-                "RSI": row.get("rsi"),
-                "Target": row.get("target_price"),
-                "Stop": row.get("stop_price"),
-                "Earnings": None if row.get("earnings") is None else f"D{row['earnings']:+d}",
-                "Tag": row.get("tag", "Watch"),
-                "Memo": row.get("memo", ""),
-            }
-            for row in filtered
-        ])
-        def _day_color(value):
-            if pd.isna(value):
-                return ""
-            if value > 0:
-                return "color: #22c55e; font-weight: 800;"
-            if value < 0:
-                return "color: #ef4444; font-weight: 800;"
-            return "color: #a9b7c9; font-weight: 700;"
-
-        def _row_market_color(row):
-            change = row.get("Day %")
-            if pd.isna(change):
-                color = "#e8eef7"
-            elif change > 0:
-                color = "#22c55e"
-            elif change < 0:
-                color = "#ef4444"
-            else:
-                color = "#a9b7c9"
-            styles = pd.Series("", index=row.index)
-            for column in ("Ticker", "Price", "Day %"):
-                if column in styles.index:
-                    styles[column] = f"color: {color}; font-weight: 800;"
-            return styles
-
-        styled_snapshot = (
-            snapshot.style
-            .apply(_row_market_color, axis=1)
-            .format({"Price": "${:,.2f}", "Day %": "{:+.2f}%", "Score": "{:.0f}", "RSI": "{:.1f}", "Target": "${:,.2f}", "Stop": "${:,.2f}"}, na_rep="—")
-        )
-        st.caption("당일 상승은 초록, 하락은 빨강으로 표시됩니다.")
-        st.dataframe(
-            styled_snapshot,
-            use_container_width=True,
-            hide_index=True,
-            height=min(560, 42 + 35 * len(snapshot)),
-            column_config={
-                "Pin": st.column_config.TextColumn("", width="small"),
-                "Ticker": st.column_config.TextColumn("Ticker", width="small"),
-                "Price": st.column_config.NumberColumn("Price"),
-                "Day %": st.column_config.NumberColumn("Day"),
-                "Signal": st.column_config.TextColumn("Signal", width="medium"),
-                "AI": st.column_config.TextColumn("AI", width="medium"),
-                "Score": st.column_config.NumberColumn("Score", format="%.0f"),
-                "RSI": st.column_config.NumberColumn("RSI", format="%.1f"),
-                "Target": st.column_config.NumberColumn("Target", format="$%.2f"),
-                "Stop": st.column_config.NumberColumn("Stop", format="$%.2f"),
-                "Earnings": st.column_config.TextColumn("Earnings", width="small"),
-                "Tag": st.column_config.TextColumn("Tag", width="small"),
-                "Memo": st.column_config.TextColumn("Memo", width="large"),
-            },
-        )
-
-    st.markdown("### Investment Cards · Edit & Details")
-    for row in filtered:
-        price_text = money(row.get("price"))
-        daily_pct = row.get("daily_pct")
-        day_text = "" if daily_pct is None else f" · {daily_pct:+.2f}%"
-        direction = "⚪" if daily_pct is None or daily_pct == 0 else ("🟢" if daily_pct > 0 else "🔴")
-        title = f"{direction} {'★' if row.get('pinned') else '☆'} {row['ticker']} · {price_text}{day_text} · {row['signal']}"
-        with st.expander(title, expanded=False):
-            m = st.columns(6)
-            m[0].metric("Price", money(row.get("price")), None if row.get("daily_pct") is None else f"{row['daily_pct']:+.2f}%")
-            m[1].metric("AI", row.get("action") or "—")
-            m[2].metric("Score", f"{row.get('score', 0):.0f}/100")
-            m[3].metric("Target", money(row.get("target_price")))
-            m[4].metric("Stop", money(row.get("stop_price")))
-            m[5].metric("Earnings", "—" if row.get("earnings") is None else f"D{row['earnings']:+d}")
-            st.caption(f"Tag: {row.get('tag', 'Watch')} · Rating: {stars(row.get('score') or 0)}")
-            if row.get("memo"):
-                st.write(row["memo"])
-            with st.form(f"edit_{row['ticker']}"):
-                e1, e2, e3 = st.columns([1, 1, 1.4])
-                epin = e1.toggle("Pinned", value=bool(row.get("pinned")))
-                etag = e2.selectbox("Tag", TAGS, index=TAGS.index(row.get("tag")) if row.get("tag") in TAGS else 0)
-                etarget = e3.number_input("Target / Buy", min_value=0.0, value=float(row.get("target_price") or 0), step=0.5)
-                e4, e5 = st.columns([1, 3])
-                estop = e4.number_input("Stop", min_value=0.0, value=float(row.get("stop_price") or 0), step=0.5)
-                ememo = e5.text_area("Memo / Investment thesis", value=row.get("memo", ""), height=90)
-                b1, b2 = st.columns([4, 1])
-                saved = b1.form_submit_button("Save changes", type="primary", use_container_width=True)
-                removed = b2.form_submit_button("Delete", use_container_width=True)
-                if saved:
-                    for item in records:
-                        if item["ticker"] == row["ticker"]:
-                            item.update({"pinned": epin, "tag": etag, "target_price": etarget or None, "stop_price": estop or None, "memo": ememo})
-                    save_watchlist_data(records)
-                    st.rerun()
-                if removed:
-                    delete_watchlist_item(row["ticker"], records)
-                    st.rerun()
-
-    if not tickers:
-        return
-
-    st.markdown("## Advanced Chart")
-    top = st.columns([1.8, 3.4])
-    selected = top[0].selectbox("Ticker", tickers)
-    period_label = top[1].radio("Range", list(PERIODS.keys()), horizontal=True, index=6)
-    controls = st.columns(8)
-    show_ma20 = controls[0].toggle("MA20", value=True); show_ma50 = controls[1].toggle("MA50", value=True)
-    show_ma100 = controls[2].toggle("MA100", value=False); show_ma200 = controls[3].toggle("MA200", value=True)
-    show_bollinger = controls[4].toggle("Bollinger", value=False); show_volume = controls[5].toggle("Volume", value=True)
-    show_rsi = controls[6].toggle("RSI", value=True); show_macd = controls[7].toggle("MACD", value=True)
-
-    period, interval = PERIODS[period_label]
-    chart_df = history(selected, period, interval); one_year = history(selected, "1y", "1d")
-    q = quote(selected); a = analyze(one_year); info = ticker_info(selected)
-    range_return = period_return(chart_df); year_return = period_return(one_year)
-    high_52 = float(one_year["High"].max()) if not one_year.empty else None
-    low_52 = float(one_year["Low"].min()) if not one_year.empty else None
-    ma200 = float(one_year["Close"].rolling(200).mean().iloc[-1]) if len(one_year) >= 200 else None
-    avg_volume = float(one_year["Volume"].tail(20).mean()) if not one_year.empty and "Volume" in one_year else None
-    volume_ratio = (q["volume"] / avg_volume) if q.get("volume") and avg_volume else None
-    stats = st.columns(8)
-    stats[0].metric("Current", money(q.get("price")), f'{q["change_pct"]:+.2f}%' if q.get("change_pct") is not None else None)
-    stats[1].metric(f"{period_label} Return", "—" if range_return is None else f"{range_return:+.2f}%")
-    stats[2].metric("1Y Return", "—" if year_return is None else f"{year_return:+.2f}%")
-    stats[3].metric("52W Low", money(low_52)); stats[4].metric("52W High", money(high_52)); stats[5].metric("MA200", money(ma200))
-    stats[6].metric("Volume Ratio", "—" if volume_ratio is None else f"{volume_ratio:.2f}x"); stats[7].metric("RSI", "—" if a.get("rsi") is None else f'{a["rsi"]:.1f}')
-    st.plotly_chart(advanced_chart(chart_df, selected, show_ma20=show_ma20, show_ma50=show_ma50, show_ma100=show_ma100, show_ma200=show_ma200, show_bollinger=show_bollinger, show_volume=show_volume, show_rsi=show_rsi, show_macd=show_macd), use_container_width=True)
-
-    st.markdown("### Fundamentals")
-    fscore = fundamental_score(info)
-    score_col, label_col = st.columns([1, 5]); score_col.metric("Fundamental Score", f'{fscore["score"]:.0f}/100')
-    label_col.markdown(f'<div class="panel"><b>{fscore["label"]}</b> · Yahoo가 일부 항목을 누락할 경우 이용 가능한 항목만으로 계산됩니다.</div>', unsafe_allow_html=True)
-    f = st.columns(8)
-    f[0].metric("Market Cap", compact(info.get("marketCap"))); f[1].metric("Trailing P/E", "—" if info.get("trailingPE") is None else f'{info.get("trailingPE"):.1f}')
-    f[2].metric("Forward P/E", "—" if info.get("forwardPE") is None else f'{info.get("forwardPE"):.1f}'); f[3].metric("EPS", "—" if info.get("trailingEps") is None else f'${info.get("trailingEps"):.2f}')
-    f[4].metric("Dividend Yield", "—" if info.get("dividendYield") is None else f'{info.get("dividendYield") * 100:.2f}%'); f[5].metric("Beta", "—" if info.get("beta") is None else f'{info.get("beta"):.2f}')
-    f[6].metric("Target Mean", money(info.get("targetMeanPrice"))); earnings_days = days_to_earnings(selected); f[7].metric("Earnings", "—" if earnings_days is None else f"D{earnings_days:+d}")
+    st.markdown("### My Investment Cards")
+    selected = st.session_state.get("watch_selected")
+    for start in range(0, len(filtered), 4):
+        cols = st.columns(4)
+        for col, row in zip(cols, filtered[start:start+4]):
+            ticker = row["ticker"]; q = quotes.get(ticker, {}); change = q.get("change_pct"); color = _color(change)
+            with col:
+                st.markdown(f'''<div class="compact-stock-card watch-grid-card"><div><b>{"★ " if row.get("pinned") else ""}{ticker}</b><span>{row.get("tag","Watch")}</span></div><strong>{money(q.get("price"))}</strong><small style="color:{color}">{"—" if change is None else f"{change:+.2f}%"}</small><p>{row.get("memo") or "No memo"}</p></div>''', unsafe_allow_html=True)
+                if st.button("Open", key=f"open_{ticker}", use_container_width=True):
+                    st.session_state["watch_selected"] = ticker; selected = ticker
+    if selected and selected in tickers:
+        st.divider(); _detail(selected, records)

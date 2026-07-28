@@ -247,6 +247,10 @@ def inject_v301() -> None:
         .watch-price{font-size:19px!important;margin-top:5px!important}
         .section-heading{margin:20px 0 9px!important}
         .section-heading h3{font-size:19px!important}
+        .compact-stock-card{background:#0d1b2d;border:1px solid #26384f;border-radius:12px;padding:11px 13px;min-height:104px;margin-bottom:5px}
+        .compact-stock-card>div{display:flex;justify-content:space-between;align-items:center}.compact-stock-card b{font-size:15px}.compact-stock-card span{font-size:10px;color:#8ea4bf;text-transform:uppercase}.compact-stock-card strong{display:block;font-size:20px;margin:8px 0 2px}.compact-stock-card small{font-size:12px}.compact-stock-card p{margin:6px 0 0;color:#a9b7c9;font-size:11px;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .watch-grid-card{min-height:112px}.earnings-card{min-height:96px}
+        [data-testid="stMetric"]{padding:7px 10px!important}.signal-card{min-height:88px!important;padding:10px 12px 4px!important}.signal-value{font-size:20px!important}.sparkline{height:22px!important}.action-card{min-height:78px!important;padding:10px 12px!important}.watch-card{min-height:82px!important;padding:9px 12px!important}.watch-price{font-size:17px!important}
         </style>
         """,
         unsafe_allow_html=True,

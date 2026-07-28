@@ -6,27 +6,24 @@ import streamlit as st
 from components.cards import stars
 from engine.analysis import analyze
 from engine.indicators import rsi_series, trend_score
-from engine.market_data import batch_quotes, history, quote
+from engine.market_data import batch_history, batch_quotes, history, quote
 from utils.formatters import money, pct
-from utils.storage import load_json
+from utils.watchlist_store import load_watchlist_data
 
 FALLBACK = ["QQQM", "SMH", "GOOGL", "SKHY", "KORU", "JPM", "HOOD", "RKLB"]
 
 
-def _watchlist(limit: int = 20) -> list[str]:
-    raw = load_json("watchlist.json", [])
+def _watchlist(limit: int = 40) -> list[str]:
+    records = load_watchlist_data(FALLBACK)
     out: list[str] = []
-    for item in raw:
-        ticker = item.get("ticker") if isinstance(item, dict) else item
-        ticker = str(ticker or "").strip().upper()
+    for item in records:
+        ticker = str(item.get("ticker") or "").strip().upper()
         if ticker and ticker not in out:
             out.append(ticker)
     return (out or FALLBACK)[:limit]
 
 
-def _signal(ticker: str, q: dict | None = None) -> dict:
-    frame = history(ticker, "1y", "1d")
-    q = q or quote(ticker)
+def _signal_from_frame(ticker: str, frame: pd.DataFrame, q: dict) -> dict:
     if frame.empty or "Close" not in frame:
         return {"Ticker": ticker, "Price": q.get("price"), "Daily %": q.get("change_pct"), "Signal": "WAIT", "Score": 50, "RSI": None, "Reason": "가격 데이터 부족"}
     close = frame["Close"].dropna().astype(float)
@@ -52,67 +49,67 @@ def _signal(ticker: str, q: dict | None = None) -> dict:
 @st.cache_data(ttl=300, show_spinner=False)
 def _radar(tickers: tuple[str, ...]) -> pd.DataFrame:
     quotes = batch_quotes(tickers)
-    rows = [_signal(t, quotes.get(t, {})) for t in tickers]
+    histories = batch_history(tickers, "1y", "1d")
+    rows = [_signal_from_frame(t, histories.get(t, pd.DataFrame()), quotes.get(t, {})) for t in tickers]
     rank = {"BUY": 0, "TRIM": 1, "SELL": 2, "HOLD": 3, "WAIT": 4}
     return pd.DataFrame(rows).assign(_rank=lambda x: x["Signal"].map(rank)).sort_values(["_rank", "Score"], ascending=[True, False]).drop(columns="_rank")
 
 
 def _signed(value: float | None) -> str:
     value = float(value or 0)
-    css = "delta-up" if value >= 0 else "delta-down"
-    return f'<span class="{css}">{value:+.2f}%</span>'
+    color = "#45a3ff" if value >= 0 else "#ff5b6e"
+    return f'<span style="color:{color};font-weight:850">{value:+.2f}%</span>'
+
+
+def _detail(ticker: str) -> None:
+    h = history(ticker, "1y", "1d")
+    q = quote(ticker)
+    a = analyze(h)
+    cols = st.columns(5)
+    cols[0].metric("Price", money(q.get("price")), pct(q.get("change_pct")))
+    cols[1].metric("Score", f'{a.get("score", 0):.0f}/100')
+    cols[2].metric("Rating", stars(a.get("score", 0)))
+    cols[3].metric("Action", a.get("action", "—"))
+    cols[4].metric("Risk", a.get("risk", "—"))
+    if not h.empty and "Close" in h:
+        st.line_chart(h["Close"].tail(180), height=260)
+    st.markdown(f'<div class="panel"><b>{a.get("action", "WAIT")}</b><br>Support {money(a.get("support"))} · Resistance {money(a.get("resistance"))}</div>', unsafe_allow_html=True)
 
 
 def render() -> None:
-    st.markdown('<div class="page-kicker">INTELLIGENCE · ONE WORKSPACE</div>', unsafe_allow_html=True)
     st.title("AI Center")
-    st.caption("Watchlist 우선순위, 개별 종목 분석, 비교를 한 화면에 모았습니다.")
-
+    st.caption("실제 My Watchlist와 연동되며, 카드 클릭 시 상세 분석을 표시합니다.")
     radar_tab, analyze_tab, compare_tab = st.tabs(["Today’s Radar", "Analyze", "Compare"])
 
     with radar_tab:
         tickers = _watchlist()
         signals = _radar(tuple(tickers))
+        selected = st.session_state.get("ai_selected_ticker")
         st.markdown("### Today’s Priority")
-        top = signals.head(6)
+        top = signals.head(9)
         for start in range(0, len(top), 3):
             cols = st.columns(3)
             for col, (_, row) in zip(cols, top.iloc[start:start+3].iterrows()):
-                tone = {"BUY": "buy", "HOLD": "hold", "TRIM": "watch", "SELL": "avoid", "WAIT": "watch"}.get(row["Signal"], "watch")
                 with col:
-                    st.markdown(
-                        f'''<div class="action-card {tone}"><div class="action-top"><div class="action-label">{row['Signal']}</div><span>{row['Score']}/100</span></div>
-                        <div style="font-size:20px;font-weight:900;margin-top:8px">{row['Ticker']} · {money(row['Price'])}</div>
-                        <div class="action-copy">{row['Reason']}<br>{_signed(row.get('Daily %'))}</div></div>''',
-                        unsafe_allow_html=True,
-                    )
+                    st.markdown(f'<div class="compact-stock-card"><div><b>{row["Ticker"]}</b><span>{row["Signal"]}</span></div><strong>{money(row["Price"])}</strong><small>{_signed(row.get("Daily %"))} · Score {row["Score"]}</small><p>{row["Reason"]}</p></div>', unsafe_allow_html=True)
+                    if st.button("Details", key=f'ai_detail_{row["Ticker"]}', use_container_width=True):
+                        st.session_state["ai_selected_ticker"] = row["Ticker"]
+                        selected = row["Ticker"]
+        if selected:
+            st.divider(); st.subheader(f"{selected} · Detail")
+            _detail(selected)
         with st.expander("Full watchlist signal table"):
-            st.dataframe(signals, use_container_width=True, hide_index=True)
+            styled = signals.style.applymap(lambda v: "color:#45a3ff;font-weight:800" if isinstance(v,(int,float)) and v>0 else "color:#ff5b6e;font-weight:800" if isinstance(v,(int,float)) and v<0 else "", subset=["Daily %"])
+            st.dataframe(styled, use_container_width=True, hide_index=True, height=360)
 
     with analyze_tab:
         ticker = st.text_input("Ticker", "NVDA", key="ai_analyze_ticker").upper().strip()
-        if ticker:
-            h = history(ticker, "1y")
-            q = quote(ticker)
-            a = analyze(h)
-            cols = st.columns(5)
-            cols[0].metric("Price", money(q.get("price")), pct(q.get("change_pct")))
-            cols[1].metric("Score", f'{a["score"]:.0f}/100')
-            cols[2].metric("Rating", stars(a["score"]))
-            cols[3].metric("Action", a["action"])
-            cols[4].metric("Risk", a["risk"])
-            st.markdown(
-                f'''<div class="panel"><div class="klabel">AI DECISION</div><div style="font-size:26px;font-weight:850;margin:9px 0">{a['action']}</div>
-                <div style="line-height:1.8">Support {money(a['support'])} · Resistance {money(a['resistance'])} · Volatility {('—' if a['volatility'] is None else format(a['volatility'], '.1f') + '%')}.</div></div>''',
-                unsafe_allow_html=True,
-            )
-            if not h.empty and "Close" in h:
-                st.line_chart(h["Close"].tail(180), height=300)
+        if ticker: _detail(ticker)
 
     with compare_tab:
         c1, c2 = st.columns(2)
         left = c1.text_input("Ticker A", "NVDA", key="compare_a").upper().strip()
         right = c2.text_input("Ticker B", "AMD", key="compare_b").upper().strip()
         if left and right:
-            rows = [_signal(left), _signal(right)]
-            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+            data = _radar((left, right))
+            st.dataframe(data, use_container_width=True, hide_index=True)
