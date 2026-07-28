@@ -10,7 +10,8 @@ except ImportError:
     plotly_events = None
 
 from components.charts import market_breadth_bar, performance_matrix, stock_heatmap
-from engine.market_data import history, quote
+from engine.fundamentals import ticker_info
+from engine.market_data import batch_quotes, history, quote
 from utils.storage import load_json
 
 GROUPS = {
@@ -41,20 +42,31 @@ SECTOR_ETFS = {
 }
 
 
-@st.cache_data(ttl=600, show_spinner=False)
+@st.cache_data(ttl=300, show_spinner=False)
 def build_rows(tickers: tuple[str, ...], sector_name: str | None = None) -> pd.DataFrame:
-    rows=[]
+    # Heatmap loading must stay fast: use a single batch quote request and equal
+    # tile sizes. Fundamentals are fetched only after the user selects a symbol.
+    quote_map = batch_quotes(tickers)
+    rows = []
     for ticker in tickers:
-        q=quote(ticker)
-        rows.append({"Ticker":ticker,"Price":q.get("price"),"Change %":q.get("change_pct"),"Weight":1.0,"Sector":sector_name or "Market"})
+        q = quote_map.get(ticker, {})
+        rows.append({
+            "Ticker": ticker,
+            "Price": q.get("price"),
+            "Change %": q.get("change_pct"),
+            "Weight": 1.0,
+            "Sector": sector_name or "Market",
+        })
     return pd.DataFrame(rows)
 
 
 @st.cache_data(ttl=300, show_spinner=False)
 def sector_snapshot() -> pd.DataFrame:
+    tickers = tuple(SECTOR_ETFS.values())
+    quote_map = batch_quotes(tickers)
     rows = []
     for sector, ticker in SECTOR_ETFS.items():
-        q = quote(ticker)
+        q = quote_map.get(ticker, {})
         rows.append({"Sector": sector, "Ticker": ticker, "Change %": q.get("change_pct"), "Price": q.get("price")})
     return pd.DataFrame(rows)
 
@@ -114,7 +126,6 @@ def _pct(value):
 
 def _render_ticker_detail(ticker: str):
     q = quote(ticker)
-    from engine.fundamentals import ticker_info
     info = ticker_info(ticker)
     change = q.get("change_pct")
     tone = "#ff5d73" if isinstance(change, (int, float)) and change < 0 else "#31d6a0"
@@ -225,9 +236,7 @@ def render():
                 df = build_rows(tuple(SECTOR_GROUPS[selected]), selected)
                 title = selected
             else:
-                raw = load_json("watchlist.json", [])
-                tickers = [x.get("ticker") if isinstance(x, dict) else x for x in raw]
-                tickers = [str(x).upper() for x in tickers if x]
+                tickers = load_json("watchlist.json", [])
                 if not tickers:
                     st.info("Watchlist에 종목을 먼저 추가하세요.")
                     return
@@ -278,8 +287,7 @@ def render():
         if selected_ticker and selected_ticker in set(df["Ticker"].astype(str).str.upper()):
             _render_ticker_detail(selected_ticker)
 
-        with st.expander("Relative strength ranking", expanded=False):
-            st.plotly_chart(market_breadth_bar(df), use_container_width=True, config={"displayModeBar": False})
+        st.plotly_chart(market_breadth_bar(df), use_container_width=True, config={"displayModeBar": False})
 
         leaders, laggards = st.columns(2, gap="large")
         display_cols = ["Ticker", "Price", "Change %", "Sector"]

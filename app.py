@@ -31,11 +31,12 @@ ROUTES = {
     "Heatmap": ("pages.heatmap", "render"),
     "Watchlist": ("pages.watchlist", "render"),
     "Portfolio": ("pages.portfolio", "render"),
-    "AI Center": ("pages.portfolio_advisor", "render"),
+    "AI Advisor": ("pages.portfolio_advisor", "render"),
     "Buy Planner": ("pages.buy_planner", "render"),
     "Earnings": ("pages.earnings", "render"),
     "News": ("pages.news", "render"),
     "Journal": ("pages.journal", "render"),
+    "AI Lab": ("pages.ai_engine", "render"),
     "Schwab": ("pages.schwab_connect", "render"),
     "Settings": ("pages.settings", "render"),
 }

@@ -28,9 +28,10 @@ def inject_theme() -> None:
         [data-testid="stSidebar"] {
           background:linear-gradient(180deg,#081525 0%,#050d17 100%);
           border-right:1px solid var(--os-border);
-          min-width:270px;
+          min-width:190px;
+          width:190px;
         }
-        [data-testid="stSidebar"] .block-container {padding-top:1.35rem;}
+        [data-testid="stSidebar"] .block-container {padding:1.1rem .7rem 1.5rem;}
         .block-container {
           max-width:1720px;
           padding-top:2.2rem !important;
@@ -40,17 +41,17 @@ def inject_theme() -> None:
         }
         h1,h2,h3 {letter-spacing:-.035em;color:var(--os-text);}
         h3 {margin-top:1.6rem !important;}
-        .os-brand{display:flex;align-items:center;gap:12px;margin:2px 0 18px;}
-        .os-brand-mark{display:grid;place-items:center;width:38px;height:38px;border-radius:12px;
+        .os-brand{display:flex;align-items:center;gap:9px;margin:2px 0 14px;}
+        .os-brand-mark{display:grid;place-items:center;width:32px;height:32px;border-radius:12px;
           font-size:18px;font-weight:900;background:linear-gradient(145deg,#2563eb,#22c55e);
           box-shadow:0 8px 24px rgba(37,99,235,.28);}
-        .os-brand-title{font-size:17px;font-weight:900;letter-spacing:.12em;}
-        .os-brand-subtitle{font-size:10px;color:var(--os-muted);letter-spacing:.13em;margin-top:2px;}
+        .os-brand-title{font-size:14px;font-weight:900;letter-spacing:.12em;}
+        .os-brand-subtitle{font-size:8px;color:var(--os-muted);letter-spacing:.13em;margin-top:2px;}
         .refresh-time{font-size:10px;color:#73869b;text-align:center;margin:7px 0 19px;}
-        .nav-group-label{font-size:9px;letter-spacing:.18em;color:#667b91;margin:16px 3px 7px;font-weight:800;}
+        .nav-group-label{font-size:9px;letter-spacing:.18em;color:#667b91;margin:11px 3px 5px;font-weight:800;}
         [data-testid="stSidebar"] .stButton>button {
           justify-content:flex-start;border-radius:10px;border:1px solid transparent;
-          min-height:38px;font-size:12px;padding-left:13px;box-shadow:none;
+          min-height:34px;font-size:11px;padding-left:10px;box-shadow:none;
         }
         [data-testid="stSidebar"] .stButton>button[kind="secondary"] {
           background:transparent;color:#aebdd0;
@@ -119,7 +120,7 @@ def inject_theme() -> None:
           .os-brand-title{font-size:15px}.os-brand-subtitle{font-size:9px}
         }
         @media (max-width: 640px){
-          [data-testid="stSidebar"]{min-width:250px!important}
+          [data-testid="stSidebar"]{min-width:220px!important;width:220px!important}
           .block-container{padding-top:.75rem!important}
           .hero-market-strip{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:7px!important}
           .hero-quote{padding:8px 9px!important}.hero-quote b{font-size:13px!important}
@@ -132,7 +133,7 @@ def inject_theme() -> None:
 
         .compact-hero{padding:17px 21px;margin-bottom:14px}.compact-hero .hero-title{font-size:27px}
         .hero-market-strip{display:flex;gap:9px;align-items:stretch}.hero-quote{min-width:112px;padding:9px 11px;border-radius:12px;background:rgba(5,15,27,.55);border:1px solid rgba(111,143,178,.18)}
-        .hero-quote span{display:block;font-size:9px;color:#7f94aa;text-transform:uppercase;letter-spacing:.1em}.hero-quote b{display:block;font-size:15px;margin-top:3px}.hero-quote em{font-style:normal;font-size:10px}.up{color:#64a6ff!important}.down{color:#ff6474!important}
+        .hero-quote span{display:block;font-size:9px;color:#7f94aa;text-transform:uppercase;letter-spacing:.1em}.hero-quote b{display:block;font-size:15px;margin-top:3px}.hero-quote em{font-style:normal;font-size:10px}.up{color:#47d7ac}.down{color:#ff6b7d}
         .action-card{min-height:100px;border-radius:15px;padding:15px 16px;background:linear-gradient(180deg,rgba(13,29,48,.98),rgba(8,20,34,.98));border:1px solid var(--os-border)}
         .action-card.buy{border-top:2px solid #35d6a5}.action-card.hold{border-top:2px solid #64a6ff}.action-card.avoid{border-top:2px solid #ff6474}.action-card.watch{border-top:2px solid #f5c451}
         .action-label{font-size:11px;font-weight:900;letter-spacing:.14em}.buy .action-label{color:#35d6a5}.hold .action-label{color:#64a6ff}.avoid .action-label{color:#ff6474}.watch .action-label{color:#f5c451}

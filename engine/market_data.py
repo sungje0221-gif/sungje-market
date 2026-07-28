@@ -140,3 +140,54 @@ def info(ticker: str):
         return dict(yf.Ticker(ticker).fast_info)
     except Exception:
         return {}
+
+@st.cache_data(ttl=60, show_spinner=False)
+def batch_quotes(tickers: tuple[str, ...]) -> dict[str, dict[str, Any]]:
+    """Fetch many Yahoo quotes in one request.
+
+    Used by dashboard/heatmap views to avoid one network round-trip per symbol.
+    Individual detail pages can still call ``quote`` so Schwab remains available.
+    """
+    symbols = tuple(dict.fromkeys(str(t).strip().upper() for t in tickers if str(t).strip()))
+    if not symbols:
+        return {}
+
+    empty = {
+        "price": None, "change_pct": None, "volume": None,
+        "bid": None, "ask": None, "last": None, "mark": None,
+        "source": "Unavailable",
+    }
+    results = {ticker: dict(empty) for ticker in symbols}
+    try:
+        data = yf.download(
+            list(symbols), period="5d", interval="1d", auto_adjust=False,
+            progress=False, threads=True, group_by="column",
+        )
+        if data is None or data.empty:
+            return results
+
+        for ticker in symbols:
+            try:
+                if isinstance(data.columns, pd.MultiIndex):
+                    close = data["Close"][ticker].dropna()
+                    volume_series = data["Volume"][ticker].dropna() if "Volume" in data.columns.get_level_values(0) else pd.Series(dtype=float)
+                else:
+                    close = data["Close"].dropna()
+                    volume_series = data["Volume"].dropna() if "Volume" in data else pd.Series(dtype=float)
+                if close.empty:
+                    continue
+                price = float(close.iloc[-1])
+                previous = float(close.iloc[-2]) if len(close) > 1 else price
+                volume = float(volume_series.iloc[-1]) if not volume_series.empty else None
+                results[ticker] = {
+                    "price": price,
+                    "change_pct": ((price / previous) - 1) * 100 if previous else 0.0,
+                    "volume": volume,
+                    "bid": None, "ask": None, "last": price, "mark": price,
+                    "source": "Yahoo Finance batch",
+                }
+            except (KeyError, TypeError, ValueError, IndexError):
+                continue
+    except Exception:
+        return results
+    return results
