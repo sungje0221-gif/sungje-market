@@ -1,5 +1,6 @@
 import pandas as pd
 import streamlit as st
+import yfinance as yf
 
 from engine.portfolio import enrich
 from engine.schwab import (
@@ -10,11 +11,11 @@ from engine.schwab import (
     connection_status,
     flatten_positions,
 )
-from utils.portfolio_store import load as load_portfolio, save as save_portfolio, status as portfolio_status, cloud_enabled
+from utils.portfolio_store import (load as load_portfolio, save as save_portfolio, status as portfolio_status, cloud_enabled, load_settings, save_settings)
 from utils.formatters import money
 from components.colored_tables import style_signed_columns
 
-COLS = ["Account", "Ticker", "Shares", "Avg Cost", "Category"]
+COLS = ["Account", "Ticker", "Shares", "Avg Cost", "Category", "Sector", "Industry"]
 
 
 def schwab_portfolio():
@@ -119,79 +120,145 @@ def schwab_portfolio():
         st.warning(f'{largest["Ticker"]} 비중이 {largest["Weight %"]:.1f}%로 높습니다.')
 
 
-def _portfolio_dashboard(e: pd.DataFrame):
-    total_value = float(e["Market Value"].sum())
+@st.cache_data(ttl=86400, show_spinner=False)
+def _security_profile(ticker: str) -> dict:
+    """Best-effort sector/industry lookup. Manual values always remain editable."""
+    try:
+        info = yf.Ticker(ticker).get_info() or {}
+        quote_type = str(info.get("quoteType") or "").upper()
+        if quote_type in {"ETF", "MUTUALFUND"}:
+            return {"Sector": "ETF / Fund", "Industry": str(info.get("category") or info.get("fundFamily") or "Diversified ETF")}
+        return {
+            "Sector": str(info.get("sector") or "Unknown"),
+            "Industry": str(info.get("industry") or "Unknown"),
+        }
+    except Exception:
+        return {"Sector": "Unknown", "Industry": "Unknown"}
+
+
+def _portfolio_dashboard(e: pd.DataFrame, settings: dict):
+    invested = float(e["Market Value"].sum())
+    cash = float(settings.get("cash", 0))
+    buying_power = float(settings.get("buying_power", 0))
+    total_value = invested + cash
     total_cost = float(e["Cost Basis"].sum())
     total_pl = float(e["P/L"].sum())
     total_pl_pct = (total_pl / total_cost * 100) if total_cost else 0.0
     day_pl = float((e["Shares"] * e.get("Day Change $", 0)).sum()) if "Day Change $" in e else 0.0
+    cash_pct = cash / total_value * 100 if total_value else 0
+    target_cash = float(settings.get("target_cash_pct", 20))
     top_weight = float(e["Weight %"].max()) if not e.empty else 0
     top3 = float(e.nlargest(3, "Weight %")["Weight %"].sum()) if len(e) else 0
-    categories = int(e["Category"].nunique())
-    diversification = max(0, min(100, round(100 - max(0, top_weight-15)*1.7 - max(0, top3-45)*0.8 + min(categories,6)*2)))
+    sectors = int(e["Sector"].replace("Unknown", pd.NA).dropna().nunique()) if "Sector" in e else 0
     risk = "HIGH" if top_weight >= 25 or top3 >= 60 else "MEDIUM" if top_weight >= 15 or top3 >= 45 else "LOW"
 
-    c=st.columns(6)
+    c=st.columns(7)
     c[0].metric("Total Value", money(total_value))
-    c[1].metric("Total Cost", money(total_cost))
-    c[2].metric("Total P/L", money(total_pl), f"{total_pl_pct:+.2f}%")
-    c[3].metric("Today's P/L", money(day_pl))
-    c[4].metric("Risk", risk)
-    c[5].metric("Diversification", f"{diversification}/100")
+    c[1].metric("Invested", money(invested))
+    c[2].metric("Cash", money(cash), f"{cash_pct:.1f}%")
+    c[3].metric("Buying Power", money(buying_power))
+    c[4].metric("Total P/L", money(total_pl), f"{total_pl_pct:+.2f}%")
+    c[5].metric("Today's P/L", money(day_pl))
+    c[6].metric("Risk", risk)
 
-    left,right=st.columns([1.35,1])
+    st.markdown("### Today's Changes")
+    movers=e.sort_values("Day %", ascending=True).copy() if "Day %" in e else e.copy()
+    movers=movers[[c for c in ["Ticker","Current Price","Day %","Day Change $","Market Value","Weight %"] if c in movers.columns]]
+    st.dataframe(style_signed_columns(movers,["Day %","Day Change $"]),use_container_width=True,hide_index=True,height=min(330,38*(len(movers)+1)))
+
+    left,right=st.columns([1.2,1])
     with left:
-        st.markdown("### Largest Holdings")
-        alloc=e.groupby("Ticker",as_index=False)["Market Value"].sum().sort_values("Market Value",ascending=False)
-        alloc["Weight %"]=alloc["Market Value"]/total_value*100 if total_value else 0
-        st.bar_chart(alloc.head(10).set_index("Ticker")["Weight %"], horizontal=True)
+        st.markdown("### Need Attention")
+        attention=[]
+        if top_weight > 20:
+            row=e.loc[e["Weight %"].idxmax()]; attention.append(("warning",f"{row['Ticker']} 비중 {row['Weight %']:.1f}% — 단일 종목 집중도가 높습니다."))
+        if top3 > 55: attention.append(("warning",f"상위 3종목 비중 {top3:.1f}% — 포트폴리오가 몇 종목에 몰려 있습니다."))
+        if cash_pct < target_cash-5: attention.append(("warning",f"현금 {cash_pct:.1f}% — 목표 {target_cash:.1f}%보다 낮습니다."))
+        elif cash_pct > target_cash+10: attention.append(("info",f"현금 {cash_pct:.1f}% — 목표보다 높아 매수 여력이 큽니다."))
+        weak=e[e["P/L %"] <= -10].sort_values("P/L %") if "P/L %" in e else pd.DataFrame()
+        for _,r in weak.head(3).iterrows(): attention.append(("warning",f"{r['Ticker']} 누적 손실 {r['P/L %']:.1f}%"))
+        if not attention: attention=[("success","현재 즉시 경고할 집중도·현금·손실 항목이 없습니다.")]
+        for kind,text in attention: getattr(st,kind)(text)
     with right:
-        st.markdown("### Portfolio Health")
-        best=e.loc[e["P/L %"].idxmax()] if not e.empty else None
-        worst=e.loc[e["P/L %"].idxmin()] if not e.empty else None
-        notes=[]
-        notes.append(("warning" if top_weight>20 else "success", f"Largest position: {e.loc[e['Weight %'].idxmax(),'Ticker']} {top_weight:.1f}%"))
-        notes.append(("warning" if top3>55 else "success", f"Top 3 concentration: {top3:.1f}%"))
-        notes.append(("info", f"Categories: {categories} · Positions: {len(e)}"))
-        if best is not None: notes.append(("success", f"Best: {best['Ticker']} {best['P/L %']:+.1f}%"))
-        if worst is not None: notes.append(("warning", f"Weakest: {worst['Ticker']} {worst['P/L %']:+.1f}%"))
-        for kind,text in notes: getattr(st,kind)(text)
+        st.markdown("### Target vs Current")
+        comp=pd.DataFrame({"Allocation":["Invested","Cash"],"Current %":[100-cash_pct,cash_pct],"Target %":[100-target_cash,target_cash]})
+        st.dataframe(comp,use_container_width=True,hide_index=True)
+        gap=cash-target_cash/100*total_value
+        if abs(gap) >= 100:
+            if gap>0: st.info(f"현금 목표를 맞추려면 약 {money(gap)}를 투자할 수 있습니다.")
+            else: st.warning(f"현금 목표를 맞추려면 약 {money(abs(gap))}를 확보해야 합니다.")
 
-    st.markdown("### Allocation by Category")
-    cat=e.groupby("Category",as_index=False)["Market Value"].sum().sort_values("Market Value",ascending=False)
-    cat["Weight %"]=cat["Market Value"]/total_value*100 if total_value else 0
-    st.bar_chart(cat.set_index("Category")["Weight %"], horizontal=True)
+    a,b=st.columns(2)
+    with a:
+        st.markdown("### Allocation by Sector")
+        sec=e.groupby("Sector",as_index=False)["Market Value"].sum().sort_values("Market Value",ascending=False)
+        sec["Weight %"]=sec["Market Value"]/invested*100 if invested else 0
+        st.bar_chart(sec.set_index("Sector")["Weight %"], horizontal=True)
+    with b:
+        st.markdown("### Allocation by Strategy")
+        cat=e.groupby("Category",as_index=False)["Market Value"].sum().sort_values("Market Value",ascending=False)
+        cat["Weight %"]=cat["Market Value"]/invested*100 if invested else 0
+        st.bar_chart(cat.set_index("Category")["Weight %"], horizontal=True)
 
 
 def manual_portfolio():
     df = load_portfolio()
+    settings = load_settings()
     mode, backend = portfolio_status()
     st.caption(f"{mode} · {backend} · " + ("같은 Supabase profile로 접속하면 다른 기기에서도 유지됩니다." if cloud_enabled() else "현재는 로컬 저장이라 재배포 시 사라질 수 있습니다."))
     sync_error=st.session_state.get("portfolio_sync_error")
     if sync_error: st.error(f"Portfolio cloud sync failed: {sync_error}")
+    settings_error=st.session_state.get("portfolio_settings_sync_error")
+    if settings_error: st.error(f"Cash settings sync failed: {settings_error}")
 
+    with st.expander("Cash / Buying Power", expanded=False):
+        with st.form("portfolio_cash_settings"):
+            c=st.columns(3)
+            cash=c[0].number_input("Cash balance",min_value=0.0,value=float(settings.get("cash",0)),step=100.0)
+            bp=c[1].number_input("Buying power",min_value=0.0,value=float(settings.get("buying_power",0)),step=100.0)
+            target=c[2].number_input("Target cash %",min_value=0.0,max_value=100.0,value=float(settings.get("target_cash_pct",20)),step=1.0)
+            if st.form_submit_button("Save cash settings",type="primary"):
+                save_settings({"cash":cash,"buying_power":bp,"target_cash_pct":target}); st.rerun()
+
+    categories=["Core ETF","Dividend ETF","Growth ETF","Sector ETF","Mega Cap","AI Software","Semiconductor","Cloud / Data Center","Cybersecurity","Power / Grid","Nuclear","Defense / Aerospace","Space","Healthcare","Financials","Consumer","Industrials","Materials / Mining","Energy","Real Estate","International","Speculative","Other"]
+    sectors=["Auto detect","Communication Services","Consumer Discretionary","Consumer Staples","Energy","Financial Services","Healthcare","Industrials","Real Estate","Technology","Utilities","Basic Materials","ETF / Fund","Unknown"]
     with st.expander("Add / Edit position", expanded=df.empty):
         with st.form("manual_position"):
-            c = st.columns(5)
+            c = st.columns(7)
             acc = c[0].text_input("Account", "Taxable")
             ticker = c[1].text_input("Ticker").upper().strip()
             shares = c[2].number_input("Shares", min_value=0.0, step=1.0)
             avg = c[3].number_input("Avg Cost", min_value=0.0, step=.01)
-            category = c[4].selectbox("Category", ["ETF", "Mega Cap", "AI", "Semiconductor", "Power", "Defense", "Healthcare", "Other"])
+            category = c[4].selectbox("Strategy", categories)
+            sector_choice = c[5].selectbox("Sector", sectors)
+            industry_manual = c[6].text_input("Industry", "")
             if st.form_submit_button("Save position") and ticker and shares > 0:
+                prof=_security_profile(ticker) if sector_choice=="Auto detect" else {"Sector":sector_choice,"Industry":industry_manual or "Unknown"}
+                if industry_manual: prof["Industry"]=industry_manual
                 keep=df[~((df["Account"]==acc)&(df["Ticker"]==ticker))]
-                new=pd.DataFrame([[acc,ticker,shares,avg,category]],columns=COLS)
+                new=pd.DataFrame([[acc,ticker,shares,avg,category,prof["Sector"],prof["Industry"]]],columns=COLS)
                 save_portfolio(pd.concat([keep,new],ignore_index=True)); st.rerun()
 
     if df.empty:
         st.info("No manual positions yet. CSV Import에서 불러오거나 직접 추가하세요.")
         return
 
+    unknown=df[df["Sector"].isin(["Unknown",""]) ]
+    if not unknown.empty and st.button(f"Auto-detect missing sectors ({len(unknown)})"):
+        updated=df.copy()
+        with st.spinner("Sector / industry 정보를 불러오는 중..."):
+            for i,row in updated.iterrows():
+                if row["Sector"] in ["Unknown",""]:
+                    prof=_security_profile(row["Ticker"]); updated.at[i,"Sector"]=prof["Sector"]; updated.at[i,"Industry"]=prof["Industry"]
+        save_portfolio(updated); st.rerun()
+
     e = enrich(df)
-    _portfolio_dashboard(e)
+    _portfolio_dashboard(e, settings)
     st.markdown("### Holdings")
-    display=e[[c for c in ["Account","Ticker","Shares","Avg Cost","Category","Current Price","Day %","Market Value","Cost Basis","P/L","P/L %","Weight %"] if c in e.columns]].copy()
-    st.dataframe(style_signed_columns(display,["Day %","P/L","P/L %"]),use_container_width=True,hide_index=True)
+    display=e[[c for c in ["Account","Ticker","Shares","Avg Cost","Category","Sector","Industry","Current Price","Day %","Market Value","Cost Basis","P/L","P/L %","Weight %"] if c in e.columns]].copy()
+    edited=st.data_editor(display,use_container_width=True,hide_index=True,disabled=["Current Price","Day %","Market Value","Cost Basis","P/L","P/L %","Weight %"],key="portfolio_holdings_editor")
+    if st.button("Save holdings edits"):
+        base=edited[["Account","Ticker","Shares","Avg Cost","Category","Sector","Industry"]].copy(); save_portfolio(base); st.rerun()
 
     with st.expander("Manage positions"):
         remove=st.multiselect("Delete positions", [f"{r.Account} · {r.Ticker}" for r in df.itertuples()])
@@ -322,7 +389,8 @@ def csv_import():
     )
     account_col = c4.selectbox("Account (optional)", ["(Use Manual)"] + columns)
     manual_account = st.text_input("Default Account", "Taxable")
-    category = st.selectbox("Default Category", ["ETF", "Mega Cap", "AI", "Semiconductor", "Power", "Defense", "Healthcare", "Other"])
+    category = st.selectbox("Default Strategy", ["Core ETF", "Dividend ETF", "Growth ETF", "Sector ETF", "Mega Cap", "AI Software", "Semiconductor", "Cloud / Data Center", "Cybersecurity", "Power / Grid", "Nuclear", "Defense / Aerospace", "Space", "Healthcare", "Financials", "Consumer", "Industrials", "Materials / Mining", "Energy", "Real Estate", "International", "Speculative", "Other"])
+    auto_classify = st.checkbox("Auto-detect sector and industry", value=True)
 
     cost_mode = st.radio(
         "Cost column meaning",
@@ -346,6 +414,13 @@ def csv_import():
         })
         converted["Account"] = raw[account_col].astype(str).str.strip() if account_col != "(Use Manual)" else manual_account
         converted["Category"] = category
+        converted["Sector"] = "Unknown"
+        converted["Industry"] = "Unknown"
+        if auto_classify:
+            with st.spinner("Sector / industry 정보를 자동 분류하는 중..."):
+                profiles = {t: _security_profile(t) for t in converted["Ticker"].dropna().unique()}
+            converted["Sector"] = converted["Ticker"].map(lambda t: profiles.get(t, {}).get("Sector", "Unknown"))
+            converted["Industry"] = converted["Ticker"].map(lambda t: profiles.get(t, {}).get("Industry", "Unknown"))
 
         # Exclude totals, cash rows, option descriptions, and malformed symbols.
         invalid_symbols = {"", "NAN", "NONE", "ACCOUNT TOTAL", "CASH", "CASH & CASH INVESTMENTS"}
