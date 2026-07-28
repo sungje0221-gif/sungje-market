@@ -122,19 +122,18 @@ def _signal_card(label: str, value: str, note: str, tone: str, ticker: str) -> s
     """
 
 
-def _playbook(score: float, vix: dict, ten: dict, oil: dict):
-    buy = "코어 ETF와 상대강도 상위 종목만 1차 분할매수" if score >= 55 else "신규 매수는 계획 금액의 25% 이하로 제한"
-    hold = "기존 강한 종목은 추세 훼손 전까지 유지" if score >= 50 else "코어 ETF와 현금 비중을 우선 유지"
-    avoid = "장 초반 급등 추격과 레버리지 확대" if (vix.get("price") or 0) < 25 else "레버리지·집중매수·감정적 물타기"
-    watch = "에너지 약세에 따른 소비·운송 수혜" if (oil.get("change_pct") or 0) <= -3 else "금리·달러·반도체 상대강도 변화"
-    if (ten.get("change_pct") or 0) > 1.5:
-        watch = "10년물 금리 상승과 성장주 압력"
-    return [
-        ("BUY", buy, "buy", "01"),
-        ("HOLD", hold, "hold", "02"),
-        ("AVOID", avoid, "avoid", "03"),
-        ("WATCH", watch, "watch", "04"),
-    ]
+def _playbook(score: float, vix: dict, ten: dict, oil: dict, ranked: list[tuple[str, float, dict]]):
+    strongest = ranked[0][0] if ranked else "코어 ETF"
+    weakest = ranked[-1][0] if ranked else "레버리지 ETF"
+    buy = f"{strongest}: 추세 유지 시 눌림목에서만 1차 분할 접근" if score >= 52 else "신규 매수는 계획 금액의 25% 이하로 제한"
+    hold = f"{strongest}: 추세 훼손 전까지 보유 우선"
+    avoid = f"{weakest}: 약세 지속 중 물타기·추격매수 금지"
+    watch = "10년물 금리 상승과 성장주 압력" if (ten.get("change_pct") or 0) > 1.5 else "금리·달러·반도체 상대강도 변화"
+    if (oil.get("change_pct") or 0) <= -3:
+        watch = "유가 급락에 따른 소비·운송 업종 상대강도"
+    if (vix.get("price") or 0) >= 25:
+        avoid = "VIX 고점 구간: 레버리지·집중매수·감정적 물타기 금지"
+    return [("BUY", buy, "buy", "01"), ("HOLD", hold, "hold", "02"), ("AVOID", avoid, "avoid", "03"), ("WATCH", watch, "watch", "04")]
 
 
 def _watch_card(ticker: str, score: float, data: dict) -> str:
@@ -201,34 +200,33 @@ def render() -> None:
     )
 
     signal_cards = [
-        ("Market Score", f"{score:.0f}<small>/100</small>", badge(score), "blue-card", "SPY"),
-        ("AI / Tech", f"{ai_score:.0f}<small>/100</small>", stars(ai_score), "purple-card", "QQQ"),
         ("Fear & Greed", str(fear), "Greed" if fear >= 60 else "Neutral" if fear >= 40 else "Fear", "green-card" if fear >= 60 else "yellow-card", "^VIX"),
         ("Volatility", f"{vix.get('price') or 0:.2f}", pct(vix.get("change_pct")), "red-card" if (vix.get("price") or 0) >= 25 else "blue-card", "^VIX"),
         ("US 10Y", f"{ten.get('price') or 0:.2f}%", pct(ten.get("change_pct")), "yellow-card", "^TNX"),
         ("Dollar", money(dxy.get("price")), pct(dxy.get("change_pct")), "blue-card", "DX-Y.NYB"),
     ]
-    for col, item in zip(st.columns(6), signal_cards):
+    for col, item in zip(st.columns(4), signal_cards):
         with col:
             st.markdown(_signal_card(*item), unsafe_allow_html=True)
 
-    st.markdown('<div class="section-heading"><div><span>TODAY\'S ACTION PLAN</span><h3>Playbook</h3></div><em>Rules before emotions</em></div>', unsafe_allow_html=True)
-    for col, (label, message, tone, number) in zip(st.columns(4), _playbook(score, vix, ten, oil)):
+    watch_tickers = _watchlist_tickers(limit=10)
+    watch_quote_map = batch_quotes(tuple(watch_tickers))
+    watch_items = [(ticker, _safe_score(ticker), watch_quote_map.get(ticker, {})) for ticker in watch_tickers]
+    watch_items.sort(key=lambda item: (item[1], abs(float(item[2].get("change_pct") or 0))), reverse=True)
+
+    st.markdown('<div class="section-heading"><div><span>TODAY\'S ACTION PLAN</span><h3>Playbook</h3></div><em>Watchlist-driven · refreshed daily</em></div>', unsafe_allow_html=True)
+    for col, (label, message, tone, number) in zip(st.columns(4), _playbook(score, vix, ten, oil, watch_items)):
         with col:
             st.markdown(
                 f'<div class="action-card {tone}"><div class="action-top"><div class="action-label">{label}</div><span>{number}</span></div><div class="action-copy">{message}</div></div>',
                 unsafe_allow_html=True,
             )
 
-    st.markdown('<div class="section-heading"><div><span>PERSONAL RADAR</span><h3>My Watchlist</h3></div><em>Trend score · daily move · 1 month path</em></div>', unsafe_allow_html=True)
-    watch_tickers = _watchlist_tickers()
-    watch_quote_map = batch_quotes(tuple(watch_tickers))
-    watch_items = []
-    for ticker in watch_tickers:
-        watch_items.append((ticker, _safe_score(ticker), watch_quote_map.get(ticker, {})))
-    for row_start in range(0, len(watch_items), 4):
-        cols = st.columns(4)
-        for col, (ticker, ticker_score, data) in zip(cols, watch_items[row_start : row_start + 4]):
+    st.markdown('<div class="section-heading"><div><span>PERSONAL RADAR</span><h3>Today’s Priority</h3></div><em>AI-ranked from My Watchlist</em></div>', unsafe_allow_html=True)
+    priority_items = watch_items[:6]
+    for row_start in range(0, len(priority_items), 3):
+        cols = st.columns(3)
+        for col, (ticker, ticker_score, data) in zip(cols, priority_items[row_start : row_start + 3]):
             with col:
                 st.markdown(_watch_card(ticker, ticker_score, data), unsafe_allow_html=True)
 

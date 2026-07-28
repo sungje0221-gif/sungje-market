@@ -1,4 +1,4 @@
-# Sungje Investment OS v3.00 — Step 1
+# Sungje Investment OS v3.01 — Step 1
 
 This build focuses on navigation speed, a narrower sidebar, a dynamic Command Center watchlist, and a faster/fixed heatmap.
 

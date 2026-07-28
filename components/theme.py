@@ -224,3 +224,30 @@ def inject_v098() -> None:
         """,
         unsafe_allow_html=True,
     )
+
+
+def inject_v301() -> None:
+    """Compact desktop shell and denser decision cards for v3.01."""
+    st.markdown(
+        """
+        <style>
+        @media (min-width: 901px){
+          [data-testid="stSidebar"]{min-width:168px!important;width:168px!important;max-width:168px!important}
+          [data-testid="stSidebar"] .block-container{padding:1rem .48rem 1.25rem!important}
+          [data-testid="stSidebar"] .stButton>button{font-size:10px!important;min-height:31px!important;padding-left:7px!important}
+          .nav-group-label{font-size:8px!important;margin:9px 2px 3px!important}
+          .os-brand{gap:7px!important;margin-bottom:10px!important}.os-brand-mark{width:28px!important;height:28px!important;border-radius:10px!important;font-size:15px!important}
+          .os-brand-title{font-size:12px!important}.os-brand-subtitle{font-size:7px!important}
+        }
+        .signal-card{min-height:116px!important;padding:13px 14px 6px!important}
+        .signal-value{font-size:23px!important}.sparkline{height:29px!important;margin-top:4px!important}
+        .action-card{min-height:96px!important;padding:13px 14px!important}
+        .action-copy{margin-top:8px!important;line-height:1.45!important}
+        .watch-card{min-height:102px!important;padding:12px 14px!important}
+        .watch-price{font-size:19px!important;margin-top:5px!important}
+        .section-heading{margin:20px 0 9px!important}
+        .section-heading h3{font-size:19px!important}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )

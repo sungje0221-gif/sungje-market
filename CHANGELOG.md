@@ -51,3 +51,11 @@
 - Heatmap now loads all symbols in one batch and uses equal tile sizes.
 - Fundamentals are fetched only after selecting a heatmap symbol.
 - Updated app branding to v3.00.
+
+## v3.01
+- Reduced desktop sidebar width to 168px and tightened navigation spacing.
+- Merged AI Advisor and AI Lab into a single AI Center.
+- Added AI Center tabs for watchlist-driven radar, single-stock analysis, and comparison.
+- Simplified Command Center signal cards from six to four.
+- Changed action plan and personal radar to rank the user's saved watchlist dynamically.
+- Reduced dashboard card heights for faster scanning and less scrolling.

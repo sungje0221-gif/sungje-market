@@ -4,9 +4,9 @@ import traceback
 import streamlit as st
 
 from components.sidebar import render_sidebar
-from components.theme import inject_dashboard_v092, inject_heatmap_v093, inject_theme, inject_v098
+from components.theme import inject_dashboard_v092, inject_heatmap_v093, inject_theme, inject_v098, inject_v301
 
-APP_VERSION = "3.00"
+APP_VERSION = "3.01"
 
 st.set_page_config(
     page_title=f"Sungje Investment OS v{APP_VERSION}",
@@ -20,6 +20,7 @@ inject_theme()
 inject_dashboard_v092()
 inject_heatmap_v093()
 inject_v098()
+inject_v301()
 
 page = render_sidebar()
 
@@ -31,12 +32,11 @@ ROUTES = {
     "Heatmap": ("pages.heatmap", "render"),
     "Watchlist": ("pages.watchlist", "render"),
     "Portfolio": ("pages.portfolio", "render"),
-    "AI Advisor": ("pages.portfolio_advisor", "render"),
     "Buy Planner": ("pages.buy_planner", "render"),
+    "AI Center": ("pages.ai_center", "render"),
     "Earnings": ("pages.earnings", "render"),
     "News": ("pages.news", "render"),
     "Journal": ("pages.journal", "render"),
-    "AI Lab": ("pages.ai_engine", "render"),
     "Schwab": ("pages.schwab_connect", "render"),
     "Settings": ("pages.settings", "render"),
 }
