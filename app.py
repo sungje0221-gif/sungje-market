@@ -6,7 +6,7 @@ import streamlit as st
 from components.sidebar import render_sidebar
 from components.theme import inject_dashboard_v092, inject_heatmap_v093, inject_theme, inject_v098, inject_v301, inject_v309
 
-APP_VERSION = "3.09"
+APP_VERSION = "3.10"
 
 st.set_page_config(
     page_title=f"Sungje Investment OS v{APP_VERSION}",
@@ -22,6 +22,10 @@ inject_heatmap_v093()
 inject_v098()
 inject_v301()
 inject_v309()
+
+# Deep links from a watchlist card should reopen the Watchlist page.
+if st.query_params.get("watch"):
+    st.session_state["os_page"] = "Watchlist"
 
 page = render_sidebar()
 

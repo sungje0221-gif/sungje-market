@@ -7,7 +7,7 @@ from components.cards import stars
 from components.charts import advanced_chart
 from engine.analysis import analyze
 from engine.fundamentals import days_to_earnings, fundamental_score, ticker_info
-from engine.market_data import batch_quotes, history, quote
+from engine.market_data import batch_history, batch_quotes, history, quote
 from utils.formatters import compact, money
 from utils.watchlist_store import delete_watchlist_item, load_watchlist_data, save_watchlist_data, storage_status
 
@@ -81,6 +81,39 @@ def _detail(ticker: str, records: list[dict]) -> None:
     f[5].metric("Target Mean", money(info.get("targetMeanPrice")))
 
 
+def _fmt_volume(value: float | None) -> str:
+    if value is None:
+        return "—"
+    value = float(value)
+    if value >= 1_000_000_000:
+        return f"{value / 1_000_000_000:.1f}B"
+    if value >= 1_000_000:
+        return f"{value / 1_000_000:.1f}M"
+    if value >= 1_000:
+        return f"{value / 1_000:.1f}K"
+    return f"{value:,.0f}"
+
+
+def _sparkline_svg(frame: pd.DataFrame, positive: bool) -> str:
+    if frame is None or frame.empty or "Close" not in frame:
+        return '<div class="watch-spark-empty">—</div>'
+    values = frame["Close"].dropna().tail(30).astype(float).tolist()
+    if len(values) < 2:
+        return '<div class="watch-spark-empty">—</div>'
+    low, high = min(values), max(values)
+    spread = high - low or 1.0
+    width, height = 150, 38
+    pts = []
+    for i, val in enumerate(values):
+        x = i * width / (len(values) - 1)
+        y = height - ((val - low) / spread) * (height - 5) - 2
+        pts.append(f"{x:.1f},{y:.1f}")
+    color = "#45a3ff" if positive else "#ff5b6e"
+    return f'''<svg class="watch-spark" viewBox="0 0 {width} {height}" preserveAspectRatio="none" aria-hidden="true">
+      <polyline points="{' '.join(pts)}" fill="none" stroke="{color}" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>'''
+
+
 def _mover_table(rows: list[dict], quotes: dict[str, dict]) -> None:
     table_rows = []
     for row in rows:
@@ -90,27 +123,39 @@ def _mover_table(rows: list[dict], quotes: dict[str, dict]) -> None:
             "Ticker": ticker,
             "Price": q.get("price"),
             "Day %": q.get("change_pct"),
+            "Day Chg $": q.get("change_abs"),
+            "Low": q.get("day_low"),
+            "High": q.get("day_high"),
+            "Volume": q.get("volume"),
             "Tag": row.get("tag", "Watch"),
-            "Pinned": "★" if row.get("pinned") else "",
             "Memo": row.get("memo") or "",
         })
     frame = pd.DataFrame(table_rows)
     if frame.empty:
         st.info("No matching tickers.")
         return
-    frame = frame.sort_values("Day %", ascending=True, na_position="last")
+
+    def color_move(value):
+        if pd.isna(value):
+            return ""
+        return "color: #45a3ff; font-weight: 700" if float(value) >= 0 else "color: #ff5b6e; font-weight: 700"
+
+    styled = frame.style.map(color_move, subset=["Day %", "Day Chg $"])
     st.dataframe(
-        frame,
+        styled,
         use_container_width=True,
         hide_index=True,
-        height=min(430, 38 + len(frame) * 35),
+        height=min(500, 38 + len(frame) * 35),
         column_config={
             "Ticker": st.column_config.TextColumn("Ticker", width="small"),
             "Price": st.column_config.NumberColumn("Price", format="$%.2f", width="small"),
             "Day %": st.column_config.NumberColumn("Day %", format="%+.2f%%", width="small"),
+            "Day Chg $": st.column_config.NumberColumn("Day Chg $", format="%+.2f", width="small"),
+            "Low": st.column_config.NumberColumn("Low", format="$%.2f", width="small"),
+            "High": st.column_config.NumberColumn("High", format="$%.2f", width="small"),
+            "Volume": st.column_config.NumberColumn("Volume", format="compact", width="small"),
             "Tag": st.column_config.TextColumn("Tag", width="small"),
-            "Pinned": st.column_config.TextColumn("", width="small"),
-            "Memo": st.column_config.TextColumn("Memo", width="large"),
+            "Memo": st.column_config.TextColumn("Memo", width="medium"),
         },
     )
 
@@ -170,29 +215,52 @@ def render() -> None:
 
     if view != "Table only":
         st.markdown("### My Investment Cards")
-        selected = st.session_state.get("watch_selected")
+        st.caption("카드 아무 곳이나 누르면 상세 화면이 열립니다. 파란색은 상승, 빨간색은 하락입니다.")
+
+        histories = batch_history(tuple(r["ticker"] for r in filtered), period="6mo", interval="1d")
+        analytics = {ticker: analyze(histories.get(ticker, pd.DataFrame())) for ticker in (r["ticker"] for r in filtered)}
+
+        selected = st.query_params.get("watch") or st.session_state.get("watch_selected")
+        st.markdown('''<style>
+        .watch-card-link{display:block;text-decoration:none!important;color:inherit!important;margin-bottom:10px}
+        .watch-card-v310{background:#0d1c2e;border:1px solid #263b54;border-radius:11px;padding:12px 13px 10px;min-height:176px;transition:all .14s ease;box-shadow:0 1px 0 rgba(255,255,255,.02)}
+        .watch-card-v310:hover{transform:translateY(-2px);border-color:#4d78aa;background:#10233a;box-shadow:0 7px 18px rgba(0,0,0,.20)}
+        .wc-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px}.wc-ticker{font-size:15px;font-weight:850;color:#f4f8ff}.wc-tag{font-size:8px;letter-spacing:.7px;color:#78aee8;text-transform:uppercase}
+        .wc-main{display:flex;justify-content:space-between;align-items:baseline}.wc-price{font-size:20px;font-weight:800;color:#fff}.wc-change{font-size:13px;font-weight:850}
+        .wc-range{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:8px;font-size:10px;color:#8297af}.wc-range b{display:block;margin-top:1px;color:#cdd9e8;font-size:11px}
+        .watch-spark{width:100%;height:38px;margin:7px 0 4px}.watch-spark-empty{height:38px;display:flex;align-items:center;justify-content:center;color:#61758e}
+        .wc-footer{display:flex;justify-content:space-between;align-items:center;border-top:1px solid #20344b;padding-top:7px}.wc-ai{font-size:10px;color:#8fa4bb}.wc-ai b{color:#e9f1fb;font-size:12px}.wc-action{font-size:10px;font-weight:900;border:1px solid #38526f;border-radius:999px;padding:3px 7px;color:#dcecff}
+        .wc-volume{font-size:9px;color:#71869f;margin-top:3px}
+        </style>''', unsafe_allow_html=True)
+
         for start in range(0, len(filtered), 5):
             cols = st.columns(5, gap="small")
             for col, row in zip(cols, filtered[start:start + 5]):
                 ticker = row["ticker"]
                 q = quotes.get(ticker, {})
                 change = q.get("change_pct")
+                positive = bool(change is not None and change >= 0)
                 color = _color(change)
+                analysis = analytics.get(ticker, {})
+                score = float(analysis.get("score", 0) or 0)
+                action = str(analysis.get("action", "WATCH") or "WATCH").upper()
                 pin = "★ " if row.get("pinned") else ""
-                memo = row.get("memo") or "No memo"
+                spark = _sparkline_svg(histories.get(ticker, pd.DataFrame()), positive)
+                day_change = q.get("change_abs")
+                href = f"?watch={ticker}"
                 with col:
-                    st.markdown(
-                        f'''<div class="compact-stock-card watch-grid-card-v309">
-                        <div class="watch-card-head"><b>{pin}{ticker}</b><span>{row.get("tag", "Watch")}</span></div>
-                        <div class="watch-card-body"><strong>{money(q.get("price"))}</strong>
-                        <small style="color:{color}">{"—" if change is None else f"{change:+.2f}%"}</small></div>
-                        <p>{memo}</p></div>''',
-                        unsafe_allow_html=True,
-                    )
-                    if st.button("Details", key=f"open_{ticker}", use_container_width=True):
-                        st.session_state["watch_selected"] = ticker
-                        selected = ticker
+                    st.markdown(f'''<a class="watch-card-link" href="{href}" target="_self">
+                    <div class="watch-card-v310">
+                      <div class="wc-head"><span class="wc-ticker">{pin}{ticker}</span><span class="wc-tag">{row.get("tag", "Watch")}</span></div>
+                      <div class="wc-main"><span class="wc-price">{money(q.get("price"))}</span><span class="wc-change" style="color:{color}">{"—" if change is None else f"{change:+.2f}%"}</span></div>
+                      <div class="wc-volume">Day change {"—" if day_change is None else f"${day_change:+.2f}"} · Vol {_fmt_volume(q.get("volume"))}</div>
+                      {spark}
+                      <div class="wc-range"><span>LOW<b>{money(q.get("day_low"))}</b></span><span>HIGH<b>{money(q.get("day_high"))}</b></span></div>
+                      <div class="wc-footer"><span class="wc-ai">AI SCORE <b>{score:.0f}</b></span><span class="wc-action">{action}</span></div>
+                    </div></a>''', unsafe_allow_html=True)
 
         if selected and selected in tickers:
+            st.session_state["watch_selected"] = selected
             st.divider()
             _detail(selected, records)
+

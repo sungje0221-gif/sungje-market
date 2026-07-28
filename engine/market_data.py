@@ -17,7 +17,7 @@ SCHWAB_MARKETDATA_BASE_URL = "https://api.schwabapi.com/marketdata/v1"
 # from Streamlit Cloud and exposes the exchange-local price/change timestamp.
 NAVER_REALTIME_BASE_URL = "https://polling.finance.naver.com/api/realtime/domestic"
 NAVER_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (compatible; InvestmentOS/3.09)",
+    "User-Agent": "Mozilla/5.0 (compatible; InvestmentOS/3.10)",
     "Accept": "application/json, text/plain, */*",
     "Referer": "https://finance.naver.com/",
 }
@@ -25,7 +25,7 @@ NAVER_HEADERS = {
 
 def _empty_quote(source: str = "Unavailable") -> dict[str, Any]:
     return {
-        "price": None, "change_pct": None, "volume": None,
+        "price": None, "change_pct": None, "change_abs": None, "day_low": None, "day_high": None, "volume": None,
         "bid": None, "ask": None, "last": None, "mark": None,
         "source": source, "as_of": None,
     }
@@ -168,9 +168,15 @@ def _schwab_quote(ticker: str) -> dict[str, Any] | None:
         if net_pct is None and price is not None and previous_close:
             net_pct = (float(price) / float(previous_close) - 1) * 100
 
+        change_abs = quote_data.get("netChange")
+        if change_abs is None and price is not None and previous_close is not None:
+            change_abs = float(price) - float(previous_close)
         return {
             "price": float(price) if price is not None else None,
             "change_pct": float(net_pct) if net_pct is not None else None,
+            "change_abs": float(change_abs) if change_abs is not None else None,
+            "day_low": quote_data.get("lowPrice"),
+            "day_high": quote_data.get("highPrice"),
             "volume": quote_data.get("totalVolume"),
             "bid": quote_data.get("bidPrice"),
             "ask": quote_data.get("askPrice"),
@@ -221,9 +227,14 @@ def quote(ticker: str) -> dict[str, Any]:
         if "Volume" in data and not data["Volume"].dropna().empty
         else None
     )
+    day_low = float(data["Low"].dropna().iloc[-1]) if "Low" in data and not data["Low"].dropna().empty else None
+    day_high = float(data["High"].dropna().iloc[-1]) if "High" in data and not data["High"].dropna().empty else None
     return {
         "price": price,
         "change_pct": ((price / previous) - 1) * 100 if previous else 0,
+        "change_abs": price - previous,
+        "day_low": day_low,
+        "day_high": day_high,
         "volume": volume,
         "bid": None,
         "ask": None,
@@ -252,7 +263,7 @@ def batch_quotes(tickers: tuple[str, ...]) -> dict[str, dict[str, Any]]:
         return {}
 
     empty = {
-        "price": None, "change_pct": None, "volume": None,
+        "price": None, "change_pct": None, "change_abs": None, "day_low": None, "day_high": None, "volume": None,
         "bid": None, "ask": None, "last": None, "mark": None,
         "source": "Unavailable",
     }
@@ -269,9 +280,13 @@ def batch_quotes(tickers: tuple[str, ...]) -> dict[str, dict[str, Any]]:
             try:
                 if isinstance(data.columns, pd.MultiIndex):
                     close = data["Close"][ticker].dropna()
+                    low_series = data["Low"][ticker].dropna() if "Low" in data.columns.get_level_values(0) else pd.Series(dtype=float)
+                    high_series = data["High"][ticker].dropna() if "High" in data.columns.get_level_values(0) else pd.Series(dtype=float)
                     volume_series = data["Volume"][ticker].dropna() if "Volume" in data.columns.get_level_values(0) else pd.Series(dtype=float)
                 else:
                     close = data["Close"].dropna()
+                    low_series = data["Low"].dropna() if "Low" in data else pd.Series(dtype=float)
+                    high_series = data["High"].dropna() if "High" in data else pd.Series(dtype=float)
                     volume_series = data["Volume"].dropna() if "Volume" in data else pd.Series(dtype=float)
                 if close.empty:
                     continue
@@ -281,6 +296,9 @@ def batch_quotes(tickers: tuple[str, ...]) -> dict[str, dict[str, Any]]:
                 results[ticker] = {
                     "price": price,
                     "change_pct": ((price / previous) - 1) * 100 if previous else 0.0,
+                    "change_abs": price - previous,
+                    "day_low": float(low_series.iloc[-1]) if not low_series.empty else None,
+                    "day_high": float(high_series.iloc[-1]) if not high_series.empty else None,
                     "volume": volume,
                     "bid": None, "ask": None, "last": price, "mark": price,
                     "source": "Yahoo Finance batch",
@@ -330,7 +348,7 @@ def direct_daily_quote(ticker: str) -> dict[str, Any]:
     Yahoo multi-symbol response can occasionally map or refresh unevenly.
     """
     empty = {
-        "price": None, "change_pct": None, "volume": None,
+        "price": None, "change_pct": None, "change_abs": None, "day_low": None, "day_high": None, "volume": None,
         "bid": None, "ask": None, "last": None, "mark": None,
         "source": "Unavailable",
     }

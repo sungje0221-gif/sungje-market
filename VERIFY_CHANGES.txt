@@ -1,8 +1,9 @@
-Investment OS v3.09 verification
+Investment OS v3.10 verification
 
-Watchlist should visibly show:
-1. Daily Movers table above cards
-2. Default Biggest losers sort
-3. View selector: Table + Cards / Table only / Cards only
-4. Five compact cards per desktop row
-5. Sidebar version v3.09
+Expected visible changes on Watchlist:
+1. Sidebar version says v3.10.
+2. Daily Movers has Low, High, Day Chg $, and Volume columns.
+3. Gains are blue and losses are red.
+4. Cards show a sparkline, AI score, AI action, low/high, dollar change, and volume.
+5. There is no separate Details button.
+6. Clicking a card opens its detail section.
