@@ -255,3 +255,29 @@ def inject_v301() -> None:
         """,
         unsafe_allow_html=True,
     )
+
+
+def inject_v309() -> None:
+    """Dense hybrid watchlist: sortable mover table plus five-column cards."""
+    st.markdown(
+        """
+        <style>
+        .watch-grid-card-v309{
+          min-height:92px!important;
+          padding:10px 11px 8px!important;
+          margin-bottom:4px!important;
+          border-radius:11px!important;
+        }
+        .watch-card-head{display:flex;justify-content:space-between;align-items:center;gap:7px}
+        .watch-card-head b{font-size:13px!important;white-space:nowrap}
+        .watch-card-head span{font-size:8px!important;max-width:70px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .watch-card-body{display:flex;align-items:baseline;justify-content:space-between;gap:7px;margin-top:7px}
+        .watch-card-body strong{font-size:17px!important;margin:0!important}
+        .watch-card-body small{font-size:10px!important;font-weight:800;white-space:nowrap}
+        .watch-grid-card-v309 p{font-size:9px!important;margin-top:5px!important;color:#8499b0!important}
+        [data-testid="stDataFrame"]{border:1px solid rgba(148,163,184,.14);border-radius:12px;overflow:hidden}
+        @media(max-width:1250px){.watch-card-head span{display:none}.watch-card-body{display:block}.watch-card-body small{display:block;margin-top:2px}}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )

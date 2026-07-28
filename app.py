@@ -4,9 +4,9 @@ import traceback
 import streamlit as st
 
 from components.sidebar import render_sidebar
-from components.theme import inject_dashboard_v092, inject_heatmap_v093, inject_theme, inject_v098, inject_v301
+from components.theme import inject_dashboard_v092, inject_heatmap_v093, inject_theme, inject_v098, inject_v301, inject_v309
 
-APP_VERSION = "3.08"
+APP_VERSION = "3.09"
 
 st.set_page_config(
     page_title=f"Sungje Investment OS v{APP_VERSION}",
@@ -21,6 +21,7 @@ inject_dashboard_v092()
 inject_heatmap_v093()
 inject_v098()
 inject_v301()
+inject_v309()
 
 page = render_sidebar()
 

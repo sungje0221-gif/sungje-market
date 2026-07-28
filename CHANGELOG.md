@@ -1,3 +1,12 @@
+## v3.09 — Hybrid Watchlist
+
+- Added a dense Daily Movers table above the cards.
+- Default sorting is Biggest losers, with gainers/largest move/pinned/ticker options.
+- Added Table + Cards, Table only, and Cards only views.
+- Reduced card width to five cards per desktop row.
+- Tightened card typography and spacing while preserving detail buttons.
+- Existing detail chart/edit/fundamental workflow is unchanged.
+
 ## v3.08 — Naver Finance Korea data
 - Replaced PyKRX with Naver Finance realtime domestic endpoints for KOSPI, KOSDAQ, Samsung Electronics, and SK hynix.
 - Reduced Korea quote cache to 60 seconds.

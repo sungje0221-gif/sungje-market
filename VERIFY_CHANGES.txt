@@ -1,13 +1,8 @@
-Investment OS v3.08 verification
+Investment OS v3.09 verification
 
-Korean market data source:
-- KOSPI: Naver Finance domestic realtime endpoint
-- KOSDAQ: Naver Finance domestic realtime endpoint
-- Samsung Electronics (005930): Naver Finance domestic realtime endpoint
-- SK hynix (000660): Naver Finance domestic realtime endpoint
-
-Safety:
-- No Yahoo Finance fallback for these four Korean instruments.
-- If Naver blocks or returns an invalid payload, the UI shows —.
-- Cache TTL is 60 seconds.
-- The Korea panel displays the source timestamp returned by Naver.
+Watchlist should visibly show:
+1. Daily Movers table above cards
+2. Default Biggest losers sort
+3. View selector: Table + Cards / Table only / Cards only
+4. Five compact cards per desktop row
+5. Sidebar version v3.09

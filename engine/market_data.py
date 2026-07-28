@@ -17,7 +17,7 @@ SCHWAB_MARKETDATA_BASE_URL = "https://api.schwabapi.com/marketdata/v1"
 # from Streamlit Cloud and exposes the exchange-local price/change timestamp.
 NAVER_REALTIME_BASE_URL = "https://polling.finance.naver.com/api/realtime/domestic"
 NAVER_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (compatible; InvestmentOS/3.08)",
+    "User-Agent": "Mozilla/5.0 (compatible; InvestmentOS/3.09)",
     "Accept": "application/json, text/plain, */*",
     "Referer": "https://finance.naver.com/",
 }
