@@ -1,9 +1,7 @@
-Investment OS v3.10 verification
+Investment OS v3.11 verification
 
-Expected visible changes on Watchlist:
-1. Sidebar version says v3.10.
-2. Daily Movers has Low, High, Day Chg $, and Volume columns.
-3. Gains are blue and losses are red.
-4. Cards show a sparkline, AI score, AI action, low/high, dollar change, and volume.
-5. There is no separate Details button.
-6. Clicking a card opens its detail section.
+1. Sidebar version says v3.11.
+2. Watchlist caption states that charts use actual 30 trading-day closes.
+3. Cards display 20D RETURN and RSI 14.
+4. Cards display RULE SCORE, not a claimed opaque AI score.
+5. Missing price history displays NO DATA / —; no random or fabricated fallback is used.

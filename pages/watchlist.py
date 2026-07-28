@@ -34,8 +34,8 @@ def _detail(ticker: str, records: list[dict]) -> None:
     stats = st.columns(6)
     stats[0].metric("Price", money(q.get("price")), None if q.get("change_pct") is None else f'{q["change_pct"]:+.2f}%')
     stats[1].metric("AI", a.get("action", "—"))
-    stats[2].metric("Score", f'{a.get("score", 0):.0f}/100')
-    stats[3].metric("Rating", stars(a.get("score", 0)))
+    stats[2].metric("Score", "—" if a.get("score") is None else f'{a["score"]:.0f}/100')
+    stats[3].metric("Rating", "—" if a.get("score") is None else stars(a["score"]))
     stats[4].metric("Target", money(row.get("target_price")))
     stats[5].metric("Earnings", "—" if days_to_earnings(ticker) is None else f'D{days_to_earnings(ticker):+d}')
 
@@ -215,7 +215,7 @@ def render() -> None:
 
     if view != "Table only":
         st.markdown("### My Investment Cards")
-        st.caption("카드 아무 곳이나 누르면 상세 화면이 열립니다. 파란색은 상승, 빨간색은 하락입니다.")
+        st.caption("카드 아무 곳이나 누르면 상세 화면이 열립니다. 미니 차트는 실제 최근 30거래일 종가이며, 점수는 추세·20일 모멘텀·RSI·MACD 기반 규칙 점수입니다.")
 
         histories = batch_history(tuple(r["ticker"] for r in filtered), period="6mo", interval="1d")
         analytics = {ticker: analyze(histories.get(ticker, pd.DataFrame())) for ticker in (r["ticker"] for r in filtered)}
@@ -230,7 +230,7 @@ def render() -> None:
         .wc-range{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:8px;font-size:10px;color:#8297af}.wc-range b{display:block;margin-top:1px;color:#cdd9e8;font-size:11px}
         .watch-spark{width:100%;height:38px;margin:7px 0 4px}.watch-spark-empty{height:38px;display:flex;align-items:center;justify-content:center;color:#61758e}
         .wc-footer{display:flex;justify-content:space-between;align-items:center;border-top:1px solid #20344b;padding-top:7px}.wc-ai{font-size:10px;color:#8fa4bb}.wc-ai b{color:#e9f1fb;font-size:12px}.wc-action{font-size:10px;font-weight:900;border:1px solid #38526f;border-radius:999px;padding:3px 7px;color:#dcecff}
-        .wc-volume{font-size:9px;color:#71869f;margin-top:3px}
+        .wc-volume{font-size:9px;color:#71869f;margin-top:3px}.wc-signal{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:4px;font-size:9px;color:#71869f}.wc-signal b{display:block;color:#cdd9e8;font-size:10px;margin-top:1px}.wc-source{font-size:8px;color:#60758e;margin-top:5px;text-align:right}
         </style>''', unsafe_allow_html=True)
 
         for start in range(0, len(filtered), 5):
@@ -242,8 +242,10 @@ def render() -> None:
                 positive = bool(change is not None and change >= 0)
                 color = _color(change)
                 analysis = analytics.get(ticker, {})
-                score = float(analysis.get("score", 0) or 0)
-                action = str(analysis.get("action", "WATCH") or "WATCH").upper()
+                score = analysis.get("score")
+                action = str(analysis.get("action", "NO DATA") or "NO DATA").upper()
+                rsi_value = analysis.get("rsi")
+                return_20d = analysis.get("return_20d")
                 pin = "★ " if row.get("pinned") else ""
                 spark = _sparkline_svg(histories.get(ticker, pd.DataFrame()), positive)
                 day_change = q.get("change_abs")
@@ -256,7 +258,9 @@ def render() -> None:
                       <div class="wc-volume">Day change {"—" if day_change is None else f"${day_change:+.2f}"} · Vol {_fmt_volume(q.get("volume"))}</div>
                       {spark}
                       <div class="wc-range"><span>LOW<b>{money(q.get("day_low"))}</b></span><span>HIGH<b>{money(q.get("day_high"))}</b></span></div>
-                      <div class="wc-footer"><span class="wc-ai">AI SCORE <b>{score:.0f}</b></span><span class="wc-action">{action}</span></div>
+                      <div class="wc-signal"><span>20D RETURN<b>{"—" if return_20d is None else f"{return_20d:+.1f}%"}</b></span><span>RSI 14<b>{"—" if rsi_value is None else f"{rsi_value:.0f}"}</b></span></div>
+                      <div class="wc-footer"><span class="wc-ai">RULE SCORE <b>{"—" if score is None else f"{score:.0f}"}</b></span><span class="wc-action">{action}</span></div>
+                      <div class="wc-source">Chart: actual last 30 closes · no random data</div>
                     </div></a>''', unsafe_allow_html=True)
 
         if selected and selected in tickers:
