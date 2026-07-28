@@ -1,0 +1,12 @@
+Investment OS v3.05 - VERIFIED CHANGES
+
+Command Center:
+- Priority cards use a 2-column layout with larger price text and right-side sparkline/signal.
+- Macro includes Silver (SI=F).
+- Korea includes Samsung Electronics (005930.KS) and SK hynix (000660.KS).
+- EWY and KORU are not shown in the Command Center Korea panel.
+
+Deployment check:
+- Browser title should show v3.05.
+- Sidebar should show INVESTMENT OS v3.05.
+- If v3.03/v3.04 is still visible, the deployed GitHub files were not replaced.
