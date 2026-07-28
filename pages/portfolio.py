@@ -10,7 +10,7 @@ from engine.schwab import (
     connection_status,
     flatten_positions,
 )
-from utils.storage import load_csv, save_csv
+from utils.portfolio_store import load as load_portfolio, save as save_portfolio, status as portfolio_status, cloud_enabled
 from utils.formatters import money
 from components.colored_tables import style_signed_columns
 
@@ -119,32 +119,86 @@ def schwab_portfolio():
         st.warning(f'{largest["Ticker"]} 비중이 {largest["Weight %"]:.1f}%로 높습니다.')
 
 
+def _portfolio_dashboard(e: pd.DataFrame):
+    total_value = float(e["Market Value"].sum())
+    total_cost = float(e["Cost Basis"].sum())
+    total_pl = float(e["P/L"].sum())
+    total_pl_pct = (total_pl / total_cost * 100) if total_cost else 0.0
+    day_pl = float((e["Shares"] * e.get("Day Change $", 0)).sum()) if "Day Change $" in e else 0.0
+    top_weight = float(e["Weight %"].max()) if not e.empty else 0
+    top3 = float(e.nlargest(3, "Weight %")["Weight %"].sum()) if len(e) else 0
+    categories = int(e["Category"].nunique())
+    diversification = max(0, min(100, round(100 - max(0, top_weight-15)*1.7 - max(0, top3-45)*0.8 + min(categories,6)*2)))
+    risk = "HIGH" if top_weight >= 25 or top3 >= 60 else "MEDIUM" if top_weight >= 15 or top3 >= 45 else "LOW"
+
+    c=st.columns(6)
+    c[0].metric("Total Value", money(total_value))
+    c[1].metric("Total Cost", money(total_cost))
+    c[2].metric("Total P/L", money(total_pl), f"{total_pl_pct:+.2f}%")
+    c[3].metric("Today's P/L", money(day_pl))
+    c[4].metric("Risk", risk)
+    c[5].metric("Diversification", f"{diversification}/100")
+
+    left,right=st.columns([1.35,1])
+    with left:
+        st.markdown("### Largest Holdings")
+        alloc=e.groupby("Ticker",as_index=False)["Market Value"].sum().sort_values("Market Value",ascending=False)
+        alloc["Weight %"]=alloc["Market Value"]/total_value*100 if total_value else 0
+        st.bar_chart(alloc.head(10).set_index("Ticker")["Weight %"], horizontal=True)
+    with right:
+        st.markdown("### Portfolio Health")
+        best=e.loc[e["P/L %"].idxmax()] if not e.empty else None
+        worst=e.loc[e["P/L %"].idxmin()] if not e.empty else None
+        notes=[]
+        notes.append(("warning" if top_weight>20 else "success", f"Largest position: {e.loc[e['Weight %'].idxmax(),'Ticker']} {top_weight:.1f}%"))
+        notes.append(("warning" if top3>55 else "success", f"Top 3 concentration: {top3:.1f}%"))
+        notes.append(("info", f"Categories: {categories} · Positions: {len(e)}"))
+        if best is not None: notes.append(("success", f"Best: {best['Ticker']} {best['P/L %']:+.1f}%"))
+        if worst is not None: notes.append(("warning", f"Weakest: {worst['Ticker']} {worst['P/L %']:+.1f}%"))
+        for kind,text in notes: getattr(st,kind)(text)
+
+    st.markdown("### Allocation by Category")
+    cat=e.groupby("Category",as_index=False)["Market Value"].sum().sort_values("Market Value",ascending=False)
+    cat["Weight %"]=cat["Market Value"]/total_value*100 if total_value else 0
+    st.bar_chart(cat.set_index("Category")["Weight %"], horizontal=True)
+
+
 def manual_portfolio():
-    df = load_csv("portfolio.csv", COLS)
-    with st.expander("Add position", expanded=df.empty):
+    df = load_portfolio()
+    mode, backend = portfolio_status()
+    st.caption(f"{mode} · {backend} · " + ("같은 Supabase profile로 접속하면 다른 기기에서도 유지됩니다." if cloud_enabled() else "현재는 로컬 저장이라 재배포 시 사라질 수 있습니다."))
+    sync_error=st.session_state.get("portfolio_sync_error")
+    if sync_error: st.error(f"Portfolio cloud sync failed: {sync_error}")
+
+    with st.expander("Add / Edit position", expanded=df.empty):
         with st.form("manual_position"):
             c = st.columns(5)
             acc = c[0].text_input("Account", "Taxable")
             ticker = c[1].text_input("Ticker").upper().strip()
             shares = c[2].number_input("Shares", min_value=0.0, step=1.0)
             avg = c[3].number_input("Avg Cost", min_value=0.0, step=.01)
-            category = c[4].selectbox(
-                "Category",
-                ["ETF", "Mega Cap", "AI", "Semiconductor", "Power", "Defense", "Healthcare", "Other"],
-            )
-            if st.form_submit_button("Add") and ticker and shares > 0:
-                new = pd.DataFrame([[acc, ticker, shares, avg, category]], columns=COLS)
-                save_csv("portfolio.csv", pd.concat([df, new], ignore_index=True))
-                st.rerun()
+            category = c[4].selectbox("Category", ["ETF", "Mega Cap", "AI", "Semiconductor", "Power", "Defense", "Healthcare", "Other"])
+            if st.form_submit_button("Save position") and ticker and shares > 0:
+                keep=df[~((df["Account"]==acc)&(df["Ticker"]==ticker))]
+                new=pd.DataFrame([[acc,ticker,shares,avg,category]],columns=COLS)
+                save_portfolio(pd.concat([keep,new],ignore_index=True)); st.rerun()
 
     if df.empty:
-        st.info("No manual positions yet.")
+        st.info("No manual positions yet. CSV Import에서 불러오거나 직접 추가하세요.")
         return
 
     e = enrich(df)
-    manual_style = style_signed_columns(e, ["P/L", "P/L %"])
-    st.dataframe(manual_style, use_container_width=True, hide_index=True)
+    _portfolio_dashboard(e)
+    st.markdown("### Holdings")
+    display=e[[c for c in ["Account","Ticker","Shares","Avg Cost","Category","Current Price","Day %","Market Value","Cost Basis","P/L","P/L %","Weight %"] if c in e.columns]].copy()
+    st.dataframe(style_signed_columns(display,["Day %","P/L","P/L %"]),use_container_width=True,hide_index=True)
 
+    with st.expander("Manage positions"):
+        remove=st.multiselect("Delete positions", [f"{r.Account} · {r.Ticker}" for r in df.itertuples()])
+        if st.button("Delete selected", disabled=not remove):
+            keys=set(tuple(x.split(" · ",1)) for x in remove)
+            keep=df[[ (r["Account"],r["Ticker"]) not in keys for _,r in df.iterrows() ]]
+            save_portfolio(keep); st.rerun()
 
 def _clean_csv_number(series: pd.Series) -> pd.Series:
     """Convert brokerage-formatted money/quantity text into numbers."""
@@ -307,8 +361,8 @@ def csv_import():
         else:
             st.markdown("#### Import Preview")
             st.dataframe(converted, use_container_width=True, hide_index=True)
-            existing = load_csv("portfolio.csv", COLS)
-            save_csv("portfolio.csv", pd.concat([existing, converted], ignore_index=True))
+            existing = load_portfolio()
+            save_portfolio(pd.concat([existing, converted], ignore_index=True))
             st.success(f"{len(converted)}개 포지션을 저장했습니다. Manual Portfolio 탭에서 확인하세요.")
 
 

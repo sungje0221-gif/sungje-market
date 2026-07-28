@@ -1,8 +1,6 @@
-# v3.14 Schwab CSV Import Fix
-
-- Detects the real Schwab header row below the account report title.
-- Supports UTF-8/UTF-8-SIG/Windows-1252 CSV files.
-- Removes empty rows, totals, and cash rows.
-- Adds robust Symbol, Quantity, and Cost Basis mapping.
-- Supports both per-share average cost and total cost basis conversion.
-- Shows an import preview before saving.
+# v3.15 Portfolio Cloud & Health
+- Added Supabase-backed portfolio_positions storage keyed by profile/account/ticker.
+- Added total value, cost, P/L, today's P/L, risk and diversification summary.
+- Added holdings and category allocation, concentration checks, best/worst position notes.
+- Added position replacement/editing and deletion.
+- CSV imports now save through the same cloud storage layer.
