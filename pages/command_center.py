@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from html import escape
 
 import pandas as pd
@@ -150,7 +151,7 @@ def _watch_card(ticker: str, score: float, data: dict) -> str:
 
 
 def render() -> None:
-    now = datetime.now()
+    now = datetime.now(ZoneInfo("America/Los_Angeles"))
     quotes = {label: quote(ticker) for label, ticker in MARKET_ASSETS.items()}
     spy = quotes["S&P 500"]
     nasdaq = quotes["NASDAQ"]

@@ -34,3 +34,10 @@
 - Added robust earnings-date fallbacks for newer yfinance response formats.
 - News now uses Yahoo Finance Search first and yfinance as a fallback.
 - News and earnings failures now show useful status messages instead of silently returning empty data.
+
+## v2.07
+- Added a dedicated US futures panel for S&P 500, Nasdaq 100, Dow and Russell 2000 futures.
+- Added VIX and an automatic Risk-On / Risk-Off / Mixed market pulse.
+- Added always-visible macro cards for DXY, US 10Y, gold, silver and WTI oil.
+- Added a Korea panel for KOSPI, KOSDAQ, USD/KRW, EWY, KORU and SKHY.
+- Added responsive morning-dashboard cards and manual-refresh support.

@@ -1,4 +1,5 @@
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import streamlit as st
 
@@ -24,8 +25,12 @@ def _refresh_all() -> None:
         clear_cache()
     except Exception:
         pass
-    st.session_state["last_manual_refresh"] = datetime.now().strftime("%I:%M:%S %p")
+    st.session_state["last_manual_refresh"] = datetime.now(ZoneInfo("America/Los_Angeles")).strftime("%I:%M:%S %p")
     st.rerun()
+
+
+def _set_page(page_name: str) -> None:
+    st.session_state["os_page"] = page_name
 
 
 def render_sidebar() -> str:
@@ -35,7 +40,7 @@ def render_sidebar() -> str:
             <div class="os-brand">
                 <div class="os-brand-mark">S</div>
                 <div><div class="os-brand-title">SUNGJE</div>
-                <div class="os-brand-subtitle">INVESTMENT OS v2.05</div></div>
+                <div class="os-brand-subtitle">INVESTMENT OS v2.07</div></div>
             </div>
             """,
             unsafe_allow_html=True,
@@ -54,12 +59,14 @@ def render_sidebar() -> str:
         for group_name, group_items in NAV_GROUPS.items():
             st.markdown(f'<div class="nav-group-label">{group_name}</div>', unsafe_allow_html=True)
             for item in group_items:
-                if st.button(
-                    f"{NAV_ICONS[item]}   {item}", key=f"nav_{item}", use_container_width=True,
+                st.button(
+                    f"{NAV_ICONS[item]}   {item}",
+                    key=f"nav_{item}",
+                    use_container_width=True,
                     type="primary" if item == selected else "secondary",
-                ):
-                    st.session_state["os_page"] = item
-                    st.rerun()
+                    on_click=_set_page,
+                    args=(item,),
+                )
 
         st.markdown(
             """
