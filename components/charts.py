@@ -155,6 +155,8 @@ def stock_heatmap(df, title="Market Heat Map"):
     clean["Price"] = pd.to_numeric(clean.get("Price", 0), errors="coerce").fillna(0.0)
     clean["Change %"] = pd.to_numeric(clean["Change %"], errors="coerce").fillna(0.0)
     clean["Weight"] = pd.to_numeric(clean.get("Weight", 1), errors="coerce").fillna(1.0).clip(lower=0.01)
+    if clean["Weight"].max() / max(clean["Weight"].median(), 0.01) > 12:
+        clean["Weight"] = clean["Weight"].pow(0.35)
     if "Sector" not in clean.columns:
         clean["Sector"] = "Market"
     clean["Sector"] = clean["Sector"].fillna("Market").astype(str)

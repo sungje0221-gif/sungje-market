@@ -101,82 +101,25 @@ def render():
     else:
         filtered.sort(key=lambda x: x["ticker"])
 
-    st.markdown("### Watchlist Snapshot")
+    st.markdown("### Watchlist Cards")
     if not filtered:
         st.info("No matching tickers.")
     else:
-        snapshot = pd.DataFrame([
-            {
-                "Pin": "★" if row.get("pinned") else "☆",
-                "Ticker": row["ticker"],
-                "Price": row.get("price"),
-                "Day %": row.get("daily_pct"),
-                "Signal": row.get("signal") or "WAIT",
-                "AI": row.get("action") or "—",
-                "Score": row.get("score"),
-                "RSI": row.get("rsi"),
-                "Target": row.get("target_price"),
-                "Stop": row.get("stop_price"),
-                "Earnings": None if row.get("earnings") is None else f"D{row['earnings']:+d}",
-                "Tag": row.get("tag", "Watch"),
-                "Memo": row.get("memo", ""),
-            }
-            for row in filtered
-        ])
-        def _day_color(value):
-            if pd.isna(value):
-                return ""
-            if value > 0:
-                return "color: #22c55e; font-weight: 800;"
-            if value < 0:
-                return "color: #ef4444; font-weight: 800;"
-            return "color: #a9b7c9; font-weight: 700;"
+        for start_idx in range(0, len(filtered), 4):
+            cols = st.columns(4)
+            for col, row in zip(cols, filtered[start_idx:start_idx + 4]):
+                daily = row.get("daily_pct") or 0
+                css = "up" if daily >= 0 else "down"
+                html = (f'<div class="watch-card"><div class="watch-head"><b>{row["ticker"]}</b>'
+                        f'<span class="score-pill">{row.get("score") or 0:.0f}</span></div>'
+                        f'<div class="watch-price">{money(row.get("price"))}</div>'
+                        f'<div class="watch-change {css}">{daily:+.2f}%</div>'
+                        f'<div style="font-size:10px;color:#8fa2b8;margin-top:9px">'
+                        f'{row.get("signal") or "WAIT"} · {row.get("tag", "Watch")}</div></div>')
+                with col:
+                    st.markdown(html, unsafe_allow_html=True)
 
-        def _row_market_color(row):
-            change = row.get("Day %")
-            if pd.isna(change):
-                color = "#e8eef7"
-            elif change > 0:
-                color = "#22c55e"
-            elif change < 0:
-                color = "#ef4444"
-            else:
-                color = "#a9b7c9"
-            styles = pd.Series("", index=row.index)
-            for column in ("Ticker", "Price", "Day %"):
-                if column in styles.index:
-                    styles[column] = f"color: {color}; font-weight: 800;"
-            return styles
-
-        styled_snapshot = (
-            snapshot.style
-            .apply(_row_market_color, axis=1)
-            .format({"Price": "${:,.2f}", "Day %": "{:+.2f}%", "Score": "{:.0f}", "RSI": "{:.1f}", "Target": "${:,.2f}", "Stop": "${:,.2f}"}, na_rep="—")
-        )
-        st.caption("당일 상승은 초록, 하락은 빨강으로 표시됩니다.")
-        st.dataframe(
-            styled_snapshot,
-            use_container_width=True,
-            hide_index=True,
-            height=min(560, 42 + 35 * len(snapshot)),
-            column_config={
-                "Pin": st.column_config.TextColumn("", width="small"),
-                "Ticker": st.column_config.TextColumn("Ticker", width="small"),
-                "Price": st.column_config.NumberColumn("Price"),
-                "Day %": st.column_config.NumberColumn("Day"),
-                "Signal": st.column_config.TextColumn("Signal", width="medium"),
-                "AI": st.column_config.TextColumn("AI", width="medium"),
-                "Score": st.column_config.NumberColumn("Score", format="%.0f"),
-                "RSI": st.column_config.NumberColumn("RSI", format="%.1f"),
-                "Target": st.column_config.NumberColumn("Target", format="$%.2f"),
-                "Stop": st.column_config.NumberColumn("Stop", format="$%.2f"),
-                "Earnings": st.column_config.TextColumn("Earnings", width="small"),
-                "Tag": st.column_config.TextColumn("Tag", width="small"),
-                "Memo": st.column_config.TextColumn("Memo", width="large"),
-            },
-        )
-
-    st.markdown("### Investment Cards · Edit & Details")
+    st.markdown("### Edit & Details")
     for row in filtered:
         price_text = money(row.get("price"))
         daily_pct = row.get("daily_pct")

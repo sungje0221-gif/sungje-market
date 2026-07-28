@@ -120,66 +120,58 @@ def _positions() -> tuple[pd.DataFrame, str]:
 
 
 def render() -> None:
-    st.markdown('<div class="page-kicker">AI ADVISOR 2.0 · VERSION 1.00</div>', unsafe_allow_html=True)
-    st.title("Portfolio AI Advisor")
-    st.caption("추세·RSI·이동평균을 결합한 규칙 기반 신호입니다. 매수는 항상 분할로 실행하세요.")
+    from utils.watchlist_store import load_watchlist_data
+    st.markdown('<div class="page-kicker">AI CENTER · VERSION 3.00</div>', unsafe_allow_html=True)
+    st.title("AI Center")
+    st.caption("Priority Radar is rebuilt from your watchlist. Positive numbers are blue; negative numbers are red.")
+    records = load_watchlist_data([])
+    tickers = [x["ticker"] for x in records]
+    tab1, tab2, tab3 = st.tabs(["Priority Radar", "Analyze a Stock", "Portfolio Signals"])
 
-    st.markdown("### Priority Radar")
-    signals = _advisor_table(tuple(PRIORITY))
-    cols = st.columns(4)
-    for idx, row in signals.iterrows():
-        tone = {"BUY": "buy", "HOLD": "hold", "TRIM": "watch", "SELL": "avoid", "WAIT": "watch"}.get(row["Signal"], "watch")
-        with cols[idx % 4]:
-            st.markdown(
-                f'''<div class="action-card {tone}"><div class="action-top"><div class="action-label">{row['Signal']}</div><span>{row['Score']}/100</span></div>
-                <div style="font-size:20px;font-weight:900;margin-top:9px">{row['Ticker']} · {money(row['Price'])}</div>
-                <div class="action-copy">{row['Reason']}<br><span style="color:#7f94aa">RSI {row['RSI'] if pd.notna(row['RSI']) else '—'} · Daily {row.get('Daily %', 0) or 0:+.2f}%</span></div></div>''',
-                unsafe_allow_html=True,
-            )
+    with tab1:
+        if not tickers:
+            st.info("Watchlist에 종목을 추가하세요.")
+        else:
+            signals = _advisor_table(tuple(tickers))
+            signals["Priority"] = signals["Daily %"].fillna(0).abs() * 2 + (signals["Score"] - 50).abs() / 10
+            signals = signals.sort_values("Priority", ascending=False).head(8)
+            cols = st.columns(4)
+            for idx, row in signals.reset_index(drop=True).iterrows():
+                tone = {"BUY":"buy", "HOLD":"hold", "TRIM":"watch", "SELL":"avoid", "WAIT":"watch"}.get(row["Signal"], "watch")
+                daily = row.get("Daily %") or 0
+                color = "#64a6ff" if daily >= 0 else "#ff6474"
+                html = (
+                    f'<div class="action-card {tone}"><div class="action-top"><div class="action-label">{row["Signal"]}</div>'
+                    f'<span>{row["Score"]}/100</span></div><div style="font-size:20px;font-weight:900;margin-top:9px">'
+                    f'{row["Ticker"]} · {money(row["Price"])}</div><div class="action-copy">{row["Reason"]}<br>'
+                    f'<span style="color:{color};font-weight:900">{daily:+.2f}%</span> · RSI '
+                    f'{row["RSI"] if pd.notna(row["RSI"]) else "—"}</div></div>'
+                )
+                with cols[idx % 4]:
+                    st.markdown(html, unsafe_allow_html=True)
 
-    st.markdown("### Signal Table")
-    st.dataframe(
-        signals,
-        use_container_width=True,
-        hide_index=True,
-        column_config={
-            "Price": st.column_config.NumberColumn(format="$%.2f"),
-            "Daily %": st.column_config.NumberColumn(format="%+.2f%%"),
-            "Score": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%d"),
-            "RSI": st.column_config.NumberColumn(format="%.1f"),
-        },
-    )
+    with tab2:
+        c1, c2 = st.columns([2, 1])
+        ticker = c1.text_input("Ticker", placeholder="NVDA").strip().upper()
+        run = c2.button("Analyze", type="primary", use_container_width=True)
+        if run and ticker:
+            row = _signal(ticker); daily = row.get("Daily %") or 0
+            m = st.columns(5)
+            m[0].metric("Ticker", ticker)
+            m[1].metric("Price", money(row["Price"]), f"{daily:+.2f}%")
+            m[2].metric("Signal", row["Signal"])
+            m[3].metric("Score", f'{row["Score"]}/100')
+            m[4].metric("RSI", row["RSI"] or "—")
+            st.info(row["Reason"])
+            chart = history(ticker, "1y", "1d")
+            if not chart.empty:
+                st.line_chart(chart["Close"], height=320)
 
-    positions, source = _positions()
-    st.markdown(f"### Portfolio Snapshot · {source}")
-    if positions.empty:
-        st.info("Schwab을 연결하거나 data/portfolio.csv에 보유 종목을 입력하면 포트폴리오 비중 분석이 표시됩니다.")
-        return
-
-    positions["Category"] = positions.apply(lambda r: classify(str(r.get("Ticker", "")), str(r.get("Description", "")), str(r.get("Asset Type", ""))), axis=1)
-    total = pd.to_numeric(positions["Market Value"], errors="coerce").fillna(0).sum()
-    if total <= 0:
-        st.info("유효한 포트폴리오 평가금액이 없습니다.")
-        return
-    positions["Weight %"] = pd.to_numeric(positions["Market Value"], errors="coerce").fillna(0) / total * 100
-    largest = positions.sort_values("Weight %", ascending=False).iloc[0]
-    allocation = positions.groupby("Category", as_index=False)["Market Value"].sum()
-    allocation["Weight %"] = allocation["Market Value"] / total * 100
-
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Portfolio Value", money(total))
-    c2.metric("Largest Position", largest["Ticker"], f'{largest["Weight %"]:.1f}%')
-    c3.metric("ETF Weight", f'{allocation.loc[allocation["Category"] == "ETF", "Weight %"].sum():.1f}%')
-    c4.metric("AI / Mega Cap", f'{allocation.loc[allocation["Category"] == "AI / Mega Cap", "Weight %"].sum():.1f}%')
-
-    advisor_display = positions[["Ticker", "Description", "Category", "Market Value", "Weight %", "Unrealized P/L", "Unrealized P/L %"]].copy()
-    st.dataframe(
-        style_signed_columns(advisor_display, ["Unrealized P/L", "Unrealized P/L %"]),
-        use_container_width=True, hide_index=True,
-        column_config={
-            "Market Value": st.column_config.NumberColumn(format="$%.2f"),
-            "Weight %": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%.1f%%"),
-            "Unrealized P/L": st.column_config.NumberColumn(format="$%.2f"),
-            "Unrealized P/L %": st.column_config.NumberColumn(format="%+.2f%%"),
-        },
-    )
+    with tab3:
+        positions, source = _positions()
+        if positions.empty:
+            st.info("Schwab을 연결하거나 data/portfolio.csv를 입력하세요.")
+        else:
+            ptickers = tuple(positions["Ticker"].dropna().astype(str).str.upper().unique())
+            st.caption(f"Source · {source}")
+            st.dataframe(_advisor_table(ptickers), use_container_width=True, hide_index=True)

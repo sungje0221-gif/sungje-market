@@ -132,7 +132,7 @@ def inject_theme() -> None:
 
         .compact-hero{padding:17px 21px;margin-bottom:14px}.compact-hero .hero-title{font-size:27px}
         .hero-market-strip{display:flex;gap:9px;align-items:stretch}.hero-quote{min-width:112px;padding:9px 11px;border-radius:12px;background:rgba(5,15,27,.55);border:1px solid rgba(111,143,178,.18)}
-        .hero-quote span{display:block;font-size:9px;color:#7f94aa;text-transform:uppercase;letter-spacing:.1em}.hero-quote b{display:block;font-size:15px;margin-top:3px}.hero-quote em{font-style:normal;font-size:10px}.up{color:#47d7ac}.down{color:#ff6b7d}
+        .hero-quote span{display:block;font-size:9px;color:#7f94aa;text-transform:uppercase;letter-spacing:.1em}.hero-quote b{display:block;font-size:15px;margin-top:3px}.hero-quote em{font-style:normal;font-size:10px}.up{color:#64a6ff!important}.down{color:#ff6474!important}
         .action-card{min-height:100px;border-radius:15px;padding:15px 16px;background:linear-gradient(180deg,rgba(13,29,48,.98),rgba(8,20,34,.98));border:1px solid var(--os-border)}
         .action-card.buy{border-top:2px solid #35d6a5}.action-card.hold{border-top:2px solid #64a6ff}.action-card.avoid{border-top:2px solid #ff6474}.action-card.watch{border-top:2px solid #f5c451}
         .action-label{font-size:11px;font-weight:900;letter-spacing:.14em}.buy .action-label{color:#35d6a5}.hold .action-label{color:#64a6ff}.avoid .action-label{color:#ff6474}.watch .action-label{color:#f5c451}

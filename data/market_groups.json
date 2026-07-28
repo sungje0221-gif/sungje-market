@@ -1,0 +1,5 @@
+{
+  "Futures": [["S&P 500", "ES=F"], ["Nasdaq 100", "NQ=F"], ["Dow", "YM=F"], ["Russell 2000", "RTY=F"], ["VIX", "^VIX"]],
+  "Macro": [["US Dollar", "DX-Y.NYB"], ["US 10Y", "^TNX"], ["Gold", "GC=F"], ["Silver", "SI=F"], ["WTI Oil", "CL=F"]],
+  "Korea": [["KOSPI", "^KS11"], ["KOSDAQ", "^KQ11"], ["USD/KRW", "KRW=X"], ["EWY", "EWY"], ["KORU", "KORU"], ["SKHY", "SKHY"]]
+}
