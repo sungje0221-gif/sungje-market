@@ -1,155 +1,68 @@
 from __future__ import annotations
 
 from datetime import datetime
-from zoneinfo import ZoneInfo
 from html import escape
+from zoneinfo import ZoneInfo
 
-import pandas as pd
 import streamlit as st
 
-from components.cards import badge, stars
-from components.charts import sector_treemap
-from components.tables import colored_change_table
+from components.cards import badge
 from engine.analysis import market_brief
 from engine.indicators import trend_score
-from engine.market_data import batch_quotes, history, quote
+from engine.market_data import batch_history, batch_quotes
 from utils.formatters import money, pct
 from utils.storage import load_json
 
-SECTORS = {
-    "Technology": "XLK",
-    "Communication": "XLC",
-    "Consumer": "XLY",
-    "Financials": "XLF",
-    "Industrials": "XLI",
-    "Healthcare": "XLV",
-    "Energy": "XLE",
-    "Utilities": "XLU",
-    "Real Estate": "XLRE",
-    "Defensive": "XLP",
-    "Materials": "XLB",
-    "Semiconductor": "SMH",
-    "Nuclear": "NLR",
-    "Defense": "ITA",
-}
+WATCH_FALLBACK = ["VOO", "QQQM", "GOOGL", "SKHY", "KORU", "SMH", "JPM", "AVGO", "NVDA", "AMZN", "META", "HOOD"]
 
-WATCH_FALLBACK = ["VOO", "QQQM", "GOOGL", "SKHY", "KORU", "SMH"]
-
-MARKET_ASSETS = {
+TOP_MARKET = {
     "S&P 500": "^GSPC",
     "NASDAQ": "^IXIC",
-    "Dow Jones": "^DJI",
-    "Russell 2000": "^RUT",
+    "Russell": "^RUT",
     "VIX": "^VIX",
     "US 10Y": "^TNX",
-    "Dollar": "DX-Y.NYB",
-    "WTI": "CL=F",
+    "DXY": "DX-Y.NYB",
+}
+
+FUTURES = {
+    "S&P": "ES=F",
+    "Nasdaq": "NQ=F",
+    "Dow": "YM=F",
+    "Russell": "RTY=F",
+    "VIX": "^VIX",
+}
+
+MACRO = {
+    "DXY": "DX-Y.NYB",
+    "US 10Y": "^TNX",
+    "Gold": "GC=F",
+    "Silver": "SI=F",
+    "Oil": "CL=F",
+}
+
+KOREA = {
+    "KOSPI": "^KS11",
+    "KOSDAQ": "^KQ11",
+    "USD/KRW": "KRW=X",
+    "EWY": "EWY",
+    "KORU": "KORU",
+    "SKHY": "SKHY",
 }
 
 
-def _safe_score(ticker: str) -> float:
-    try:
-        value = trend_score(history(ticker, "6mo"))
-        return float(value) if value is not None else 50.0
-    except Exception:
-        return 50.0
+def _fmt_price(label: str, price: float | None) -> str:
+    if price is None:
+        return "—"
+    if label == "US 10Y":
+        return f"{price:.2f}%"
+    if label == "USD/KRW":
+        return f"₩{price:,.2f}"
+    if label in {"S&P 500", "NASDAQ", "Russell", "VIX", "S&P", "Nasdaq", "Dow", "KOSPI", "KOSDAQ"}:
+        return f"{price:,.2f}"
+    return f"${price:,.2f}"
 
 
-def _sparkline_svg(ticker: str, width: int = 146, height: int = 36) -> str:
-    """Return a tiny dependency-free SVG sparkline for a dashboard card."""
-    try:
-        frame = history(ticker, "1mo", "1d")
-        values = frame["Close"].dropna().astype(float).tail(22).tolist()
-    except Exception:
-        values = []
-
-    if len(values) < 2:
-        return '<div class="spark-empty">No chart</div>'
-
-    low, high = min(values), max(values)
-    spread = high - low or 1.0
-    points = []
-    for index, value in enumerate(values):
-        x = index * width / max(1, len(values) - 1)
-        y = height - 3 - ((value - low) / spread) * (height - 8)
-        points.append(f"{x:.1f},{y:.1f}")
-
-    positive = values[-1] >= values[0]
-    stroke = "#35d6a5" if positive else "#ff6474"
-    fill = "rgba(53,214,165,.10)" if positive else "rgba(255,100,116,.10)"
-    polygon = f"0,{height} " + " ".join(points) + f" {width},{height}"
-    return (
-        f'<svg class="sparkline" viewBox="0 0 {width} {height}" preserveAspectRatio="none" aria-hidden="true">'
-        f'<polygon points="{polygon}" fill="{fill}" />'
-        f'<polyline points="{" ".join(points)}" fill="none" stroke="{stroke}" stroke-width="2" '
-        'stroke-linecap="round" stroke-linejoin="round" />'
-        "</svg>"
-    )
-
-
-def _market_state(score: float, vix_value: float | None) -> tuple[str, str]:
-    vix = vix_value or 20
-    if score >= 65 and vix < 22:
-        return "RISK ON", "positive"
-    if score < 42 or vix >= 28:
-        return "DEFENSIVE", "negative"
-    return "SELECTIVE", "neutral"
-
-
-def _hero_ticker(label: str, ticker: str, data: dict) -> str:
-    change = data.get("change_pct")
-    css = "up" if (change or 0) >= 0 else "down"
-    price = data.get("price")
-    if ticker == "^TNX" and price is not None:
-        shown_price = f"{price:.2f}%"
-    else:
-        shown_price = money(price)
-    return (
-        '<div class="hero-quote">'
-        f'<span>{escape(label)}</span><b>{shown_price}</b>'
-        f'<em class="{css}">{pct(change)}</em></div>'
-    )
-
-
-def _signal_card(label: str, value: str, note: str, tone: str, ticker: str) -> str:
-    return f"""
-    <div class="signal-card {tone}">
-      <div class="signal-top"><span>{escape(label)}</span><span class="signal-dot"></span></div>
-      <div class="signal-value">{value}</div>
-      <div class="signal-note">{note}</div>
-      {_sparkline_svg(ticker)}
-    </div>
-    """
-
-
-def _playbook(score: float, vix: dict, ten: dict, oil: dict, ranked: list[tuple[str, float, dict]]):
-    strongest = ranked[0][0] if ranked else "코어 ETF"
-    weakest = ranked[-1][0] if ranked else "레버리지 ETF"
-    buy = f"{strongest}: 추세 유지 시 눌림목에서만 1차 분할 접근" if score >= 52 else "신규 매수는 계획 금액의 25% 이하로 제한"
-    hold = f"{strongest}: 추세 훼손 전까지 보유 우선"
-    avoid = f"{weakest}: 약세 지속 중 물타기·추격매수 금지"
-    watch = "10년물 금리 상승과 성장주 압력" if (ten.get("change_pct") or 0) > 1.5 else "금리·달러·반도체 상대강도 변화"
-    if (oil.get("change_pct") or 0) <= -3:
-        watch = "유가 급락에 따른 소비·운송 업종 상대강도"
-    if (vix.get("price") or 0) >= 25:
-        avoid = "VIX 고점 구간: 레버리지·집중매수·감정적 물타기 금지"
-    return [("BUY", buy, "buy", "01"), ("HOLD", hold, "hold", "02"), ("AVOID", avoid, "avoid", "03"), ("WATCH", watch, "watch", "04")]
-
-
-def _watch_card(ticker: str, score: float, data: dict) -> str:
-    change = data.get("change_pct")
-    change_class = "up" if (change or 0) >= 0 else "down"
-    score_class = "strong" if score >= 65 else "weak" if score < 45 else "mid"
-    return f"""
-    <div class="watch-card">
-      <div class="watch-head"><b>{ticker}</b><span class="score-pill {score_class}">{score:.0f}</span></div>
-      <div class="watch-price">{money(data.get('price'))}</div>
-      <div class="watch-change {change_class}">{pct(change)}</div>
-    </div>
-    """
-
-
-def _watchlist_tickers(limit: int = 8) -> list[str]:
+def _watchlist_tickers(limit: int = 12) -> list[str]:
     raw = load_json("watchlist.json", [])
     tickers: list[str] = []
     for item in raw:
@@ -160,103 +73,170 @@ def _watchlist_tickers(limit: int = 8) -> list[str]:
     return (tickers or WATCH_FALLBACK)[:limit]
 
 
+def _score_from_frame(frame) -> float:
+    try:
+        score = trend_score(frame)
+        return float(score) if score is not None else 50.0
+    except Exception:
+        return 50.0
+
+
+def _priority_tag(score: float, change: float | None) -> tuple[str, str]:
+    change = float(change or 0)
+    if score >= 70 and change >= 0:
+        return "BUY", "buy"
+    if score >= 58:
+        return "HOLD", "hold"
+    if score <= 35:
+        return "RISK", "risk"
+    if abs(change) >= 4:
+        return "MOVE", "move"
+    return "WATCH", "watch"
+
+
+def _top_quote(label: str, ticker: str, data: dict) -> str:
+    change = data.get("change_pct")
+    css = "up" if (change or 0) >= 0 else "down"
+    return (
+        '<div class="top-quote">'
+        f'<span>{escape(label)}</span><b>{_fmt_price(label, data.get("price"))}</b>'
+        f'<em class="{css}">{pct(change)}</em></div>'
+    )
+
+
+def _priority_card(ticker: str, score: float, data: dict) -> str:
+    change = data.get("change_pct")
+    css = "up" if (change or 0) >= 0 else "down"
+    tag, tag_css = _priority_tag(score, change)
+    return f"""
+    <div class="priority-card">
+      <div class="priority-top"><b>{escape(ticker)}</b><span class="priority-score">{score:.0f}</span></div>
+      <div class="priority-middle"><strong>{money(data.get('price'))}</strong><em class="{css}">{pct(change)}</em></div>
+      <div class="priority-tag {tag_css}">{tag}</div>
+    </div>
+    """
+
+
+def _group_panel(title: str, subtitle: str, items: dict[str, str], quotes: dict[str, dict]) -> str:
+    rows = []
+    for label, ticker in items.items():
+        data = quotes.get(ticker, {})
+        change = data.get("change_pct")
+        css = "up" if (change or 0) >= 0 else "down"
+        rows.append(
+            '<div class="market-row">'
+            f'<span>{escape(label)}</span>'
+            f'<b>{_fmt_price(label, data.get("price"))}</b>'
+            f'<em class="{css}">{pct(change)}</em>'
+            '</div>'
+        )
+    return f"""
+    <div class="market-group-panel">
+      <div class="market-group-head"><span>{escape(subtitle)}</span><h3>{escape(title)}</h3></div>
+      {''.join(rows)}
+    </div>
+    """
+
+
 def render() -> None:
     now = datetime.now(ZoneInfo("America/Los_Angeles"))
-    market_quote_map = batch_quotes(tuple(MARKET_ASSETS.values()))
-    quotes = {label: market_quote_map.get(ticker, {}) for label, ticker in MARKET_ASSETS.items()}
-    spy = quotes["S&P 500"]
-    nasdaq = quotes["NASDAQ"]
-    vix = quotes["VIX"]
-    ten = quotes["US 10Y"]
-    dxy = quotes["Dollar"]
-    oil = quotes["WTI"]
+    watch_tickers = _watchlist_tickers(12)
 
-    score = round((_safe_score("SPY") + _safe_score("QQQ")) / 2, 1)
-    ai_score = round((_safe_score("QQQ") + _safe_score("SMH")) / 2)
+    all_tickers = tuple(dict.fromkeys(
+        list(TOP_MARKET.values()) + list(FUTURES.values()) + list(MACRO.values()) + list(KOREA.values()) + watch_tickers
+    ))
+    quote_map = batch_quotes(all_tickers)
+
+    histories = batch_history(tuple(watch_tickers + ["SPY", "QQQ"]), period="6mo", interval="1d")
+    market_score = round((_score_from_frame(histories.get("SPY")) + _score_from_frame(histories.get("QQQ"))) / 2, 1)
+
+    vix = quote_map.get("^VIX", {})
+    ten = quote_map.get("^TNX", {})
+    dxy = quote_map.get("DX-Y.NYB", {})
     fear = max(0, min(100, round(100 - (vix.get("price") or 20) * 2.2 + 25)))
-    state, state_tone = _market_state(score, vix.get("price"))
+    state = "RISK ON" if market_score >= 65 and (vix.get("price") or 20) < 22 else "DEFENSIVE" if market_score < 42 or (vix.get("price") or 20) >= 28 else "SELECTIVE"
+    state_tone = "positive" if state == "RISK ON" else "negative" if state == "DEFENSIVE" else "neutral"
 
     greeting = "Morning" if now.hour < 12 else "Afternoon" if now.hour < 18 else "Evening"
+    top_quotes = "".join(_top_quote(label, ticker, quote_map.get(ticker, {})) for label, ticker in TOP_MARKET.items())
+    fear_html = (
+        '<div class="top-quote">'
+        '<span>Fear & Greed</span>'
+        f'<b>{fear}</b><em class="{"up" if fear >= 50 else "down"}">{"Greed" if fear >= 60 else "Neutral" if fear >= 40 else "Fear"}</em>'
+        '</div>'
+    )
+
     st.markdown(
         f"""
-        <div class="hero terminal-hero">
+        <style>
+        .command-hero{{padding:15px 18px!important;margin-bottom:14px!important}}
+        .command-hero .hero-row{{align-items:center!important}}
+        .command-hero .hero-copy{{min-width:265px}}
+        .command-hero .hero-title{{font-size:26px!important;margin-top:1px!important}}
+        .command-hero .hero-sub{{font-size:11px!important;margin-top:3px!important}}
+        .command-top-strip{{display:grid;grid-template-columns:repeat(7,minmax(82px,1fr));gap:6px;flex:1}}
+        .top-quote{{padding:8px 9px;border-radius:10px;background:rgba(5,15,27,.58);border:1px solid rgba(111,143,178,.17);min-width:0}}
+        .top-quote span{{display:block;font-size:8px;color:#7890a8;text-transform:uppercase;letter-spacing:.08em;white-space:nowrap}}
+        .top-quote b{{display:block;font-size:13px;margin-top:2px;white-space:nowrap}}
+        .top-quote em{{display:block;font-style:normal;font-size:9px;margin-top:1px}}
+        .priority-grid-note{{font-size:9px;color:#70869c;margin-top:-5px;margin-bottom:8px}}
+        .priority-card{{min-height:76px;padding:10px 11px;border-radius:13px;background:linear-gradient(180deg,rgba(14,30,49,.98),rgba(7,18,31,.98));border:1px solid rgba(148,163,184,.14)}}
+        .priority-top,.priority-middle{{display:flex;align-items:center;justify-content:space-between;gap:8px}}
+        .priority-top b{{font-size:12px}}.priority-score{{font-size:8px;padding:3px 6px;border-radius:999px;color:#9cb2c8;border:1px solid rgba(148,163,184,.15)}}
+        .priority-middle{{margin-top:7px}}.priority-middle strong{{font-size:15px}}.priority-middle em{{font-size:10px;font-style:normal;font-weight:800}}
+        .priority-tag{{display:inline-block;margin-top:7px;font-size:8px;font-weight:900;letter-spacing:.09em;padding:2px 6px;border-radius:999px;background:rgba(100,166,255,.09);color:#64a6ff}}
+        .priority-tag.buy{{color:#35d6a5;background:rgba(53,214,165,.09)}}.priority-tag.risk{{color:#ff6474;background:rgba(255,100,116,.09)}}.priority-tag.move{{color:#f3c969;background:rgba(243,201,105,.09)}}
+        .market-group-panel{{border-radius:15px;padding:13px 14px;background:linear-gradient(180deg,rgba(13,29,48,.98),rgba(8,20,34,.98));border:1px solid rgba(148,163,184,.14)}}
+        .market-group-head span{{font-size:8px;letter-spacing:.14em;color:#6f89a5;font-weight:900}}.market-group-head h3{{font-size:17px!important;margin:1px 0 7px!important}}
+        .market-row{{display:grid;grid-template-columns:1.15fr .9fr .65fr;gap:7px;align-items:center;padding:6px 0;border-top:1px solid rgba(148,163,184,.08);font-size:10px}}
+        .market-row span{{color:#a9bacb}}.market-row b{{text-align:right;font-size:11px;white-space:nowrap}}.market-row em{{text-align:right;font-style:normal;font-size:9px;font-weight:850}}
+        .compact-brief{{margin-top:12px;padding:12px 14px!important;min-height:auto!important}}.compact-brief .ai-brief-copy{{font-size:11px!important;line-height:1.55!important}}
+        @media(max-width:1200px){{.command-top-strip{{grid-template-columns:repeat(4,minmax(90px,1fr))}}}}
+        @media(max-width:900px){{.command-top-strip{{grid-template-columns:repeat(2,minmax(0,1fr));margin-top:12px}}.command-hero .hero-row{{display:block!important}}}}
+        </style>
+        <div class="hero terminal-hero command-hero">
           <div class="hero-row">
             <div class="hero-copy">
-              <div class="hero-kicker">SUNGJE INVESTMENT OS · COMMAND CENTER</div>
               <div class="hero-title">Good {greeting}, Sungje</div>
               <div class="hero-sub">{now.strftime('%A, %B %d · %I:%M %p')} Pacific Time</div>
               <div class="market-regime {state_tone}"><span></span>{state}</div>
             </div>
-            <div class="hero-market-strip">
-              {_hero_ticker('S&P 500', '^GSPC', spy)}
-              {_hero_ticker('NASDAQ', '^IXIC', nasdaq)}
-              {_hero_ticker('VIX', '^VIX', vix)}
-              {_hero_ticker('US 10Y', '^TNX', ten)}
-            </div>
+            <div class="command-top-strip">{top_quotes}{fear_html}</div>
           </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    signal_cards = [
-        ("Fear & Greed", str(fear), "Greed" if fear >= 60 else "Neutral" if fear >= 40 else "Fear", "green-card" if fear >= 60 else "yellow-card", "^VIX"),
-        ("Volatility", f"{vix.get('price') or 0:.2f}", pct(vix.get("change_pct")), "red-card" if (vix.get("price") or 0) >= 25 else "blue-card", "^VIX"),
-        ("US 10Y", f"{ten.get('price') or 0:.2f}%", pct(ten.get("change_pct")), "yellow-card", "^TNX"),
-        ("Dollar", money(dxy.get("price")), pct(dxy.get("change_pct")), "blue-card", "DX-Y.NYB"),
-    ]
-    for col, item in zip(st.columns(4), signal_cards):
-        with col:
-            st.markdown(_signal_card(*item), unsafe_allow_html=True)
-
-    watch_tickers = _watchlist_tickers(limit=10)
-    watch_quote_map = batch_quotes(tuple(watch_tickers))
-    watch_items = [(ticker, _safe_score(ticker), watch_quote_map.get(ticker, {})) for ticker in watch_tickers]
+    watch_items = []
+    for ticker in watch_tickers:
+        score = _score_from_frame(histories.get(ticker))
+        data = quote_map.get(ticker, {})
+        watch_items.append((ticker, score, data))
     watch_items.sort(key=lambda item: (item[1], abs(float(item[2].get("change_pct") or 0))), reverse=True)
 
-    st.markdown('<div class="section-heading"><div><span>TODAY\'S ACTION PLAN</span><h3>Playbook</h3></div><em>Watchlist-driven · refreshed daily</em></div>', unsafe_allow_html=True)
-    for col, (label, message, tone, number) in zip(st.columns(4), _playbook(score, vix, ten, oil, watch_items)):
-        with col:
-            st.markdown(
-                f'<div class="action-card {tone}"><div class="action-top"><div class="action-label">{label}</div><span>{number}</span></div><div class="action-copy">{message}</div></div>',
-                unsafe_allow_html=True,
-            )
-
-    st.markdown('<div class="section-heading"><div><span>PERSONAL RADAR</span><h3>Today’s Priority</h3></div><em>AI-ranked from My Watchlist</em></div>', unsafe_allow_html=True)
-    priority_items = watch_items[:6]
-    for row_start in range(0, len(priority_items), 3):
-        cols = st.columns(3)
-        for col, (ticker, ticker_score, data) in zip(cols, priority_items[row_start : row_start + 3]):
+    st.markdown('<div class="section-heading"><div><span>PERSONAL RADAR</span><h3>Today’s Priority</h3></div><em>Top 12 from My Watchlist</em></div>', unsafe_allow_html=True)
+    st.markdown('<div class="priority-grid-note">Compact view · score, price, daily move and current signal</div>', unsafe_allow_html=True)
+    for row_start in range(0, len(watch_items), 4):
+        cols = st.columns(4)
+        for col, (ticker, score, data) in zip(cols, watch_items[row_start:row_start + 4]):
             with col:
-                st.markdown(_watch_card(ticker, ticker_score, data), unsafe_allow_html=True)
+                st.markdown(_priority_card(ticker, score, data), unsafe_allow_html=True)
 
-    left, right = st.columns([1.55, 1], gap="large")
-    with left:
-        st.markdown('<div class="section-heading compact"><div><span>GLOBAL PULSE</span><h3>Market Overview</h3></div></div>', unsafe_allow_html=True)
-        rows = []
-        for label, ticker in MARKET_ASSETS.items():
-            data = quotes[label]
-            rows.append({"Asset": label, "Price": data.get("price"), "Change %": data.get("change_pct")})
-        colored_change_table(pd.DataFrame(rows), price_col="Price", change_col="Change %")
+    st.markdown('<div class="section-heading"><div><span>GLOBAL PULSE</span><h3>Futures · Macro · Korea</h3></div><em>One-screen market context</em></div>', unsafe_allow_html=True)
+    groups = [("US Futures", "OVERNIGHT DIRECTION", FUTURES), ("Macro", "RATES · FX · COMMODITIES", MACRO), ("Korea", "KOSPI · FX · US PROXIES", KOREA)]
+    for col, (title, subtitle, items) in zip(st.columns(3), groups):
+        with col:
+            st.markdown(_group_panel(title, subtitle, items, quote_map), unsafe_allow_html=True)
 
-    with right:
-        st.markdown('<div class="section-heading compact"><div><span>AI BRIEF</span><h3>Decision Context</h3></div></div>', unsafe_allow_html=True)
-        brief = market_brief(score, vix.get("price"), ten.get("price"), dxy.get("price"))
-        st.markdown(
-            f"""
-            <div class="ai-brief-panel">
-              <div class="ai-brief-head"><span>OS SIGNAL</span><b>{score:.0f}/100</b></div>
-              <div class="ai-brief-copy">{escape(str(brief))}</div>
-              <div class="brief-tags"><span>Bias · {badge(score)}</span><span>Horizon · 1–3 Days</span><span>Regime · {state}</span></div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    st.markdown('<div class="section-heading"><div><span>MONEY FLOW</span><h3>Sector Rotation</h3></div><em>Daily relative performance</em></div>', unsafe_allow_html=True)
-    sector_quote_map = batch_quotes(tuple(SECTORS.values()))
-    sector_rows = []
-    for label, ticker in SECTORS.items():
-        data = sector_quote_map.get(ticker, {})
-        sector_rows.append({"Sector": label, "Ticker": ticker, "Daily %": data.get("change_pct")})
-    st.plotly_chart(sector_treemap(pd.DataFrame(sector_rows)), use_container_width=True, config={"displayModeBar": False})
+    brief = market_brief(market_score, vix.get("price"), ten.get("price"), dxy.get("price"))
+    st.markdown(
+        f"""
+        <div class="ai-brief-panel compact-brief">
+          <div class="ai-brief-head"><span>AI DECISION CONTEXT</span><b>{market_score:.0f}/100</b></div>
+          <div class="ai-brief-copy">{escape(str(brief))}</div>
+          <div class="brief-tags"><span>Bias · {badge(market_score)}</span><span>Horizon · 1–3 Days</span><span>Regime · {state}</span></div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )

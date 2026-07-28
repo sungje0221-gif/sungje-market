@@ -5,14 +5,14 @@ import streamlit as st
 
 NAV_GROUPS = {
     "HOME": ["Command Center"],
-    "MARKETS": ["Markets", "Heatmap", "Watchlist"],
+    "MARKETS": ["Heatmap", "Watchlist"],
     "PORTFOLIO": ["Portfolio", "Buy Planner"],
     "INTELLIGENCE": ["AI Center", "Earnings", "News"],
     "SYSTEM": ["Journal", "Settings"],
 }
 
 NAV_ICONS = {
-    "Command Center": "⌂", "Markets": "◫", "Heatmap": "▦", "Watchlist": "☆",
+    "Command Center": "⌂", "Heatmap": "▦", "Watchlist": "☆",
     "Portfolio": "◉", "Buy Planner": "＋", "AI Center": "✦", "Earnings": "◷",
     "News": "≡", "Journal": "✎", "Settings": "⚙",
 }
@@ -41,7 +41,7 @@ def render_sidebar() -> str:
             <div class="os-brand">
                 <div class="os-brand-mark">S</div>
                 <div><div class="os-brand-title">SUNGJE</div>
-                <div class="os-brand-subtitle">INVESTMENT OS v3.02</div></div>
+                <div class="os-brand-subtitle">INVESTMENT OS v3.03</div></div>
             </div>
             """,
             unsafe_allow_html=True,
