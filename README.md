@@ -1,12 +1,3 @@
-# Sungje Investment OS v3.01 — Step 1
+# Investment OS v3.14
 
-This build focuses on navigation speed, a narrower sidebar, a dynamic Command Center watchlist, and a faster/fixed heatmap.
-
-Run locally:
-
-```bash
-pip install -r requirements.txt
-streamlit run app.py
-```
-
-The deployment ZIP intentionally excludes `__pycache__`, `.pyc`, virtual environments, and local secrets.
+This build fixes Charles Schwab Positions CSV imports whose first line is an account report title rather than the actual column header.
