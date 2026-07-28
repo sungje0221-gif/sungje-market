@@ -1,9 +1,7 @@
-# Changelog
+# v3.13 Flexible Charts
 
-## v3.12 — Intraday Detail Charts
-- Detail pages now open on actual 1-minute candles for the current session.
-- Added 5-day / 5-minute view plus the existing daily and weekly ranges.
-- Intraday OHLCV uses a separate 30-second cache.
-- Overnight and weekend gaps are removed from intraday charts.
-- Intraday charts show volume and short moving average without unsuitable long daily averages.
-- No synthetic or random candles are generated.
+- Separated chart range and candle interval controls.
+- Range choices: 1D, 5D, 1M, 3M, 6M, 1Y, 5Y.
+- Candle choices change to valid intervals for the selected range.
+- Defaults now use 1m for 1D, 5m for 5D, and 60m for 1M so short-range charts are not sparse.
+- Uses actual Yahoo Finance OHLCV data only; no generated candles.

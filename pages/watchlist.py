@@ -13,14 +13,34 @@ from utils.watchlist_store import delete_watchlist_item, load_watchlist_data, sa
 
 DEFAULT = ["GOOGL","META","AMZN","MSFT","AAPL","NVDA","AVGO","SMH","CEG","VRT","ETN","ANET","SKHY","SPCX"]
 TAGS = ["Watch", "Long-term", "Swing", "Trade", "ETF", "AI", "Dividend", "High Risk"]
-PERIODS = {
-    "1D · 1m": ("1d", "1m"),
-    "5D · 5m": ("5d", "5m"),
-    "1M · 1d": ("1mo", "1d"),
-    "3M · 1d": ("3mo", "1d"),
-    "6M · 1d": ("6mo", "1d"),
-    "1Y · 1d": ("1y", "1d"),
-    "5Y · 1wk": ("5y", "1wk"),
+RANGES = {
+    "1D": "1d",
+    "5D": "5d",
+    "1M": "1mo",
+    "3M": "3mo",
+    "6M": "6mo",
+    "1Y": "1y",
+    "5Y": "5y",
+}
+
+CANDLES_BY_RANGE = {
+    "1D": ["1m", "2m", "5m", "15m", "30m", "60m"],
+    "5D": ["1m", "2m", "5m", "15m", "30m", "60m"],
+    "1M": ["5m", "15m", "30m", "60m", "1d"],
+    "3M": ["60m", "1d"],
+    "6M": ["1d", "1wk"],
+    "1Y": ["1d", "1wk"],
+    "5Y": ["1d", "1wk", "1mo"],
+}
+
+DEFAULT_CANDLE = {
+    "1D": "1m",
+    "5D": "5m",
+    "1M": "60m",
+    "3M": "1d",
+    "6M": "1d",
+    "1Y": "1d",
+    "5Y": "1wk",
 }
 
 
@@ -47,9 +67,20 @@ def _detail(ticker: str, records: list[dict]) -> None:
     stats[4].metric("Target", money(row.get("target_price")))
     stats[5].metric("Earnings", "—" if days_to_earnings(ticker) is None else f'D{days_to_earnings(ticker):+d}')
 
-    period_label = st.radio("Range / candle", list(PERIODS), horizontal=True, index=0, key=f"range_{ticker}")
-    period, interval = PERIODS[period_label]
-    is_intraday = interval in {"1m", "5m"}
+    range_col, candle_col = st.columns([2, 1])
+    with range_col:
+        range_label = st.radio("Range", list(RANGES), horizontal=True, index=0, key=f"range_{ticker}")
+    candle_options = CANDLES_BY_RANGE[range_label]
+    candle_key = f"candle_{ticker}_{range_label}"
+    with candle_col:
+        interval = st.selectbox(
+            "Candle",
+            candle_options,
+            index=candle_options.index(DEFAULT_CANDLE[range_label]),
+            key=candle_key,
+        )
+    period = RANGES[range_label]
+    is_intraday = interval.endswith("m") or interval.endswith("h")
     chart_df = intraday_history(ticker, period, interval) if is_intraday else history(ticker, period, interval)
 
     if not chart_df.empty:
@@ -73,7 +104,7 @@ def _detail(ticker: str, records: list[dict]) -> None:
             use_container_width=True,
         )
     else:
-        st.warning(f"No {interval} chart data is currently available for {ticker}. Try another range.")
+        st.warning(f"No {interval} chart data is currently available for {ticker} in the selected range. Choose another candle interval.")
 
     with st.expander("Edit investment card", expanded=False):
         with st.form(f"edit_{ticker}"):
