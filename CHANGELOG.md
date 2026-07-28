@@ -59,3 +59,9 @@
 - Simplified Command Center signal cards from six to four.
 - Changed action plan and personal radar to rank the user's saved watchlist dynamically.
 - Reduced dashboard card heights for faster scanning and less scrolling.
+
+
+## v3.04
+- Redesigned Today’s Priority cards into a denser two-column layout with larger typography and mini sparklines.
+- Added Silver to Macro & Commodities.
+- Replaced EWY/KORU/SKHY in Korea Market with Samsung Electronics (005930) and SK hynix (000660).

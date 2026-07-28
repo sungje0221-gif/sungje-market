@@ -43,10 +43,9 @@ MACRO = {
 KOREA = {
     "KOSPI": "^KS11",
     "KOSDAQ": "^KQ11",
+    "Samsung (005930)": "005930.KS",
+    "SK hynix (000660)": "000660.KS",
     "USD/KRW": "KRW=X",
-    "EWY": "EWY",
-    "KORU": "KORU",
-    "SKHY": "SKHY",
 }
 
 
@@ -57,6 +56,8 @@ def _fmt_price(label: str, price: float | None) -> str:
         return f"{price:.2f}%"
     if label == "USD/KRW":
         return f"₩{price:,.2f}"
+    if label in {"Samsung (005930)", "SK hynix (000660)"}:
+        return f"₩{price:,.0f}"
     if label in {"S&P 500", "NASDAQ", "Russell", "VIX", "S&P", "Nasdaq", "Dow", "KOSPI", "KOSDAQ"}:
         return f"{price:,.2f}"
     return f"${price:,.2f}"
@@ -104,15 +105,41 @@ def _top_quote(label: str, ticker: str, data: dict) -> str:
     )
 
 
-def _priority_card(ticker: str, score: float, data: dict) -> str:
+def _sparkline_svg(frame, positive: bool) -> str:
+    try:
+        closes = frame["Close"].dropna().tail(28).astype(float).tolist()
+    except Exception:
+        closes = []
+    if len(closes) < 2:
+        return '<svg class="priority-spark" viewBox="0 0 120 34" aria-hidden="true"><path d="M2 18 L118 18"/></svg>'
+    low, high = min(closes), max(closes)
+    span = (high - low) or 1.0
+    points = []
+    for idx, value in enumerate(closes):
+        x = 2 + idx * 116 / (len(closes) - 1)
+        y = 31 - ((value - low) / span) * 27
+        points.append(f"{x:.1f},{y:.1f}")
+    css = "spark-up" if positive else "spark-down"
+    return f'<svg class="priority-spark {css}" viewBox="0 0 120 34" aria-hidden="true"><polyline points="{" ".join(points)}"/></svg>'
+
+
+def _priority_card(ticker: str, score: float, data: dict, frame=None) -> str:
     change = data.get("change_pct")
-    css = "up" if (change or 0) >= 0 else "down"
+    positive = (change or 0) >= 0
+    css = "up" if positive else "down"
     tag, tag_css = _priority_tag(score, change)
+    sparkline = _sparkline_svg(frame, positive)
     return f"""
     <div class="priority-card">
-      <div class="priority-top"><b>{escape(ticker)}</b><span class="priority-score">{score:.0f}</span></div>
-      <div class="priority-middle"><strong>{money(data.get('price'))}</strong><em class="{css}">{pct(change)}</em></div>
-      <div class="priority-tag {tag_css}">{tag}</div>
+      <div class="priority-left">
+        <div class="priority-top"><b>{escape(ticker)}</b><span class="priority-score">{score:.0f}</span></div>
+        <div class="priority-price">{money(data.get('price'))}</div>
+        <div class="priority-change {css}">{pct(change)}</div>
+      </div>
+      <div class="priority-right">
+        {sparkline}
+        <div class="priority-tag {tag_css}">{tag}</div>
+      </div>
     </div>
     """
 
@@ -180,11 +207,12 @@ def render() -> None:
         .top-quote b{{display:block;font-size:13px;margin-top:2px;white-space:nowrap}}
         .top-quote em{{display:block;font-style:normal;font-size:9px;margin-top:1px}}
         .priority-grid-note{{font-size:9px;color:#70869c;margin-top:-5px;margin-bottom:8px}}
-        .priority-card{{min-height:76px;padding:10px 11px;border-radius:13px;background:linear-gradient(180deg,rgba(14,30,49,.98),rgba(7,18,31,.98));border:1px solid rgba(148,163,184,.14)}}
-        .priority-top,.priority-middle{{display:flex;align-items:center;justify-content:space-between;gap:8px}}
-        .priority-top b{{font-size:12px}}.priority-score{{font-size:8px;padding:3px 6px;border-radius:999px;color:#9cb2c8;border:1px solid rgba(148,163,184,.15)}}
-        .priority-middle{{margin-top:7px}}.priority-middle strong{{font-size:15px}}.priority-middle em{{font-size:10px;font-style:normal;font-weight:800}}
-        .priority-tag{{display:inline-block;margin-top:7px;font-size:8px;font-weight:900;letter-spacing:.09em;padding:2px 6px;border-radius:999px;background:rgba(100,166,255,.09);color:#64a6ff}}
+        .priority-card{{min-height:88px;padding:12px 13px;border-radius:13px;background:linear-gradient(180deg,rgba(14,30,49,.98),rgba(7,18,31,.98));border:1px solid rgba(148,163,184,.14);display:grid;grid-template-columns:minmax(0,1fr) 126px;gap:12px;align-items:center}}
+        .priority-left{{min-width:0}}.priority-right{{display:flex;flex-direction:column;align-items:flex-end;justify-content:space-between;min-height:62px}}
+        .priority-top{{display:flex;align-items:center;justify-content:space-between;gap:8px}}.priority-top b{{font-size:14px;letter-spacing:.01em}}.priority-score{{font-size:9px;padding:3px 7px;border-radius:999px;color:#9cb2c8;border:1px solid rgba(148,163,184,.18)}}
+        .priority-price{{font-size:20px;font-weight:850;line-height:1.15;margin-top:5px;white-space:nowrap}}.priority-change{{font-size:11px;font-weight:850;margin-top:3px}}
+        .priority-spark{{width:120px;height:34px;overflow:visible}}.priority-spark polyline,.priority-spark path{{fill:none;stroke:#7c8ea2;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;opacity:.92}}.priority-spark.spark-up polyline{{stroke:#35d6a5}}.priority-spark.spark-down polyline{{stroke:#ff6474}}
+        .priority-tag{{display:inline-block;font-size:9px;font-weight:900;letter-spacing:.09em;padding:3px 9px;border-radius:999px;background:rgba(100,166,255,.09);color:#64a6ff}}
         .priority-tag.buy{{color:#35d6a5;background:rgba(53,214,165,.09)}}.priority-tag.risk{{color:#ff6474;background:rgba(255,100,116,.09)}}.priority-tag.move{{color:#f3c969;background:rgba(243,201,105,.09)}}
         .market-group-panel{{border-radius:15px;padding:13px 14px;background:linear-gradient(180deg,rgba(13,29,48,.98),rgba(8,20,34,.98));border:1px solid rgba(148,163,184,.14)}}
         .market-group-head span{{font-size:8px;letter-spacing:.14em;color:#6f89a5;font-weight:900}}.market-group-head h3{{font-size:17px!important;margin:1px 0 7px!important}}
@@ -221,10 +249,10 @@ def render() -> None:
         cols = st.columns(4)
         for col, (ticker, score, data) in zip(cols, watch_items[row_start:row_start + 4]):
             with col:
-                st.markdown(_priority_card(ticker, score, data), unsafe_allow_html=True)
+                st.markdown(_priority_card(ticker, score, data, histories.get(ticker)), unsafe_allow_html=True)
 
     st.markdown('<div class="section-heading"><div><span>GLOBAL PULSE</span><h3>Futures · Macro · Korea</h3></div><em>One-screen market context</em></div>', unsafe_allow_html=True)
-    groups = [("US Futures", "OVERNIGHT DIRECTION", FUTURES), ("Macro", "RATES · FX · COMMODITIES", MACRO), ("Korea", "KOSPI · FX · US PROXIES", KOREA)]
+    groups = [("US Futures", "OVERNIGHT DIRECTION", FUTURES), ("Macro & Commodities", "RATES · FX · COMMODITIES", MACRO), ("Korea Market", "KOSPI · FX · LEADERS", KOREA)]
     for col, (title, subtitle, items) in zip(st.columns(3), groups):
         with col:
             st.markdown(_group_panel(title, subtitle, items, quote_map), unsafe_allow_html=True)
