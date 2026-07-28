@@ -17,6 +17,29 @@ from components.colored_tables import style_signed_columns
 
 COLS = ["Account", "Ticker", "Shares", "Avg Cost", "Category", "Sector", "Industry"]
 
+STRATEGIES = [
+    "Core ETF", "Broad Market ETF", "Dividend ETF", "Covered Call ETF",
+    "Growth ETF", "Sector ETF", "International ETF", "Bond ETF",
+    "Commodity ETF", "Leveraged ETF", "Inverse ETF",
+    "Mega Cap", "AI Software", "AI Infrastructure", "Cloud / Data Center",
+    "Cybersecurity", "Networking", "Semiconductor - Memory",
+    "Semiconductor - Equipment", "Semiconductor - Foundry",
+    "Semiconductor - Design", "Power / Grid", "Utilities", "Nuclear",
+    "Oil & Gas", "Defense / Aerospace", "Space", "Drone / Robotics",
+    "Healthcare", "Pharma", "Medical Devices", "Biotech",
+    "Financials", "Insurance", "Payments / Fintech", "Consumer Staples",
+    "Consumer Discretionary", "Retail", "Industrials",
+    "Materials / Mining", "Gold", "Silver", "Real Estate",
+    "Speculative", "Other",
+]
+
+SECTORS = [
+    "Auto detect", "Communication Services", "Consumer Discretionary",
+    "Consumer Staples", "Energy", "Financial Services", "Healthcare",
+    "Industrials", "Real Estate", "Technology", "Utilities",
+    "Basic Materials", "ETF / Fund", "Unknown",
+]
+
 
 def schwab_portfolio():
     status = connection_status()
@@ -122,18 +145,60 @@ def schwab_portfolio():
 
 @st.cache_data(ttl=86400, show_spinner=False)
 def _security_profile(ticker: str) -> dict:
-    """Best-effort sector/industry lookup. Manual values always remain editable."""
+    """Best-effort classification lookup. Manual edits always take priority."""
     try:
         info = yf.Ticker(ticker).get_info() or {}
         quote_type = str(info.get("quoteType") or "").upper()
         if quote_type in {"ETF", "MUTUALFUND"}:
-            return {"Sector": "ETF / Fund", "Industry": str(info.get("category") or info.get("fundFamily") or "Diversified ETF")}
+            industry = str(info.get("category") or info.get("fundFamily") or "Diversified ETF")
+            return {
+                "Sector": "ETF / Fund",
+                "Industry": industry,
+                "Quote Type": quote_type,
+            }
         return {
             "Sector": str(info.get("sector") or "Unknown"),
             "Industry": str(info.get("industry") or "Unknown"),
+            "Quote Type": quote_type or "EQUITY",
         }
     except Exception:
-        return {"Sector": "Unknown", "Industry": "Unknown"}
+        return {"Sector": "Unknown", "Industry": "Unknown", "Quote Type": "Unknown"}
+
+
+def _suggest_strategy(ticker: str, profile: dict) -> str:
+    text = f"{ticker} {profile.get('Sector', '')} {profile.get('Industry', '')}".lower()
+    if profile.get("Sector") == "ETF / Fund":
+        if any(k in text for k in ["leveraged", "2x", "3x", "ultra"]): return "Leveraged ETF"
+        if any(k in text for k in ["inverse", "short"]): return "Inverse ETF"
+        if any(k in text for k in ["covered call", "buywrite", "income"]): return "Covered Call ETF"
+        if any(k in text for k in ["dividend", "value"]): return "Dividend ETF"
+        if any(k in text for k in ["bond", "treasury", "fixed income"]): return "Bond ETF"
+        if any(k in text for k in ["gold", "silver", "commodity"]): return "Commodity ETF"
+        if any(k in text for k in ["international", "emerging", "korea", "china", "europe"]): return "International ETF"
+        if any(k in text for k in ["growth", "nasdaq", "technology"]): return "Growth ETF"
+        return "Broad Market ETF"
+    if "semiconductor" in text or "chip" in text:
+        if any(k in text for k in ["memory", "dram", "nand"]): return "Semiconductor - Memory"
+        if any(k in text for k in ["equipment", "wafer", "lithography"]): return "Semiconductor - Equipment"
+        if any(k in text for k in ["foundry", "fabrication"]): return "Semiconductor - Foundry"
+        return "Semiconductor - Design"
+    if any(k in text for k in ["artificial intelligence", "software", "application software"]): return "AI Software"
+    if any(k in text for k in ["data center", "server", "electrical equipment"]): return "AI Infrastructure"
+    if "cyber" in text: return "Cybersecurity"
+    if any(k in text for k in ["network", "communication equipment"]): return "Networking"
+    if any(k in text for k in ["aerospace", "defense"]): return "Defense / Aerospace"
+    if any(k in text for k in ["space", "satellite"]): return "Space"
+    if any(k in text for k in ["utility", "electric", "power", "grid"]): return "Power / Grid"
+    if "nuclear" in text or "uranium" in text: return "Nuclear"
+    if profile.get("Sector") == "Healthcare": return "Healthcare"
+    if profile.get("Sector") == "Financial Services": return "Financials"
+    if profile.get("Sector") == "Consumer Staples": return "Consumer Staples"
+    if profile.get("Sector") == "Consumer Discretionary": return "Consumer Discretionary"
+    if profile.get("Sector") == "Industrials": return "Industrials"
+    if profile.get("Sector") == "Basic Materials": return "Materials / Mining"
+    if profile.get("Sector") == "Energy": return "Oil & Gas"
+    if profile.get("Sector") == "Real Estate": return "Real Estate"
+    return "Other"
 
 
 def _portfolio_dashboard(e: pd.DataFrame, settings: dict):
@@ -211,7 +276,7 @@ def manual_portfolio():
     settings_error=st.session_state.get("portfolio_settings_sync_error")
     if settings_error: st.error(f"Cash settings sync failed: {settings_error}")
 
-    with st.expander("Cash / Buying Power", expanded=False):
+    with st.expander("Cash / Buying Power", expanded=True):
         with st.form("portfolio_cash_settings"):
             c=st.columns(3)
             cash=c[0].number_input("Cash balance",min_value=0.0,value=float(settings.get("cash",0)),step=100.0)
@@ -220,8 +285,6 @@ def manual_portfolio():
             if st.form_submit_button("Save cash settings",type="primary"):
                 save_settings({"cash":cash,"buying_power":bp,"target_cash_pct":target}); st.rerun()
 
-    categories=["Core ETF","Dividend ETF","Growth ETF","Sector ETF","Mega Cap","AI Software","Semiconductor","Cloud / Data Center","Cybersecurity","Power / Grid","Nuclear","Defense / Aerospace","Space","Healthcare","Financials","Consumer","Industrials","Materials / Mining","Energy","Real Estate","International","Speculative","Other"]
-    sectors=["Auto detect","Communication Services","Consumer Discretionary","Consumer Staples","Energy","Financial Services","Healthcare","Industrials","Real Estate","Technology","Utilities","Basic Materials","ETF / Fund","Unknown"]
     with st.expander("Add / Edit position", expanded=df.empty):
         with st.form("manual_position"):
             c = st.columns(7)
@@ -229,14 +292,16 @@ def manual_portfolio():
             ticker = c[1].text_input("Ticker").upper().strip()
             shares = c[2].number_input("Shares", min_value=0.0, step=1.0)
             avg = c[3].number_input("Avg Cost", min_value=0.0, step=.01)
-            category = c[4].selectbox("Strategy", categories)
-            sector_choice = c[5].selectbox("Sector", sectors)
+            category = c[4].selectbox("Strategy", STRATEGIES)
+            sector_choice = c[5].selectbox("Sector", SECTORS)
             industry_manual = c[6].text_input("Industry", "")
             if st.form_submit_button("Save position") and ticker and shares > 0:
                 prof=_security_profile(ticker) if sector_choice=="Auto detect" else {"Sector":sector_choice,"Industry":industry_manual or "Unknown"}
-                if industry_manual: prof["Industry"]=industry_manual
+                if industry_manual:
+                    prof["Industry"] = industry_manual
+                final_category = _suggest_strategy(ticker, prof) if category == "Other" and sector_choice == "Auto detect" else category
                 keep=df[~((df["Account"]==acc)&(df["Ticker"]==ticker))]
-                new=pd.DataFrame([[acc,ticker,shares,avg,category,prof["Sector"],prof["Industry"]]],columns=COLS)
+                new=pd.DataFrame([[acc,ticker,shares,avg,final_category,prof["Sector"],prof["Industry"]]],columns=COLS)
                 save_portfolio(pd.concat([keep,new],ignore_index=True)); st.rerun()
 
     if df.empty:
@@ -244,19 +309,52 @@ def manual_portfolio():
         return
 
     unknown=df[df["Sector"].isin(["Unknown",""]) ]
-    if not unknown.empty and st.button(f"Auto-detect missing sectors ({len(unknown)})"):
+    b1, b2 = st.columns(2)
+    if not unknown.empty and b1.button(f"Auto-detect missing classifications ({len(unknown)})", use_container_width=True):
         updated=df.copy()
         with st.spinner("Sector / industry 정보를 불러오는 중..."):
             for i,row in updated.iterrows():
                 if row["Sector"] in ["Unknown",""]:
-                    prof=_security_profile(row["Ticker"]); updated.at[i,"Sector"]=prof["Sector"]; updated.at[i,"Industry"]=prof["Industry"]
+                    prof=_security_profile(row["Ticker"])
+                    updated.at[i,"Sector"] = prof["Sector"]
+                    updated.at[i,"Industry"] = prof["Industry"]
+                    if row["Category"] in ["Other", "", None]:
+                        updated.at[i,"Category"] = _suggest_strategy(row["Ticker"], prof)
+        save_portfolio(updated); st.rerun()
+    if b2.button("Refresh all sector / industry data", use_container_width=True):
+        updated=df.copy()
+        with st.spinner("전체 종목 분류 정보를 새로 불러오는 중..."):
+            for i,row in updated.iterrows():
+                prof=_security_profile(row["Ticker"])
+                updated.at[i,"Sector"] = prof["Sector"]
+                updated.at[i,"Industry"] = prof["Industry"]
+                if row["Category"] in ["Other", "", None]:
+                    updated.at[i,"Category"] = _suggest_strategy(row["Ticker"], prof)
         save_portfolio(updated); st.rerun()
 
     e = enrich(df)
     _portfolio_dashboard(e, settings)
     st.markdown("### Holdings")
     display=e[[c for c in ["Account","Ticker","Shares","Avg Cost","Category","Sector","Industry","Current Price","Day %","Market Value","Cost Basis","P/L","P/L %","Weight %"] if c in e.columns]].copy()
-    edited=st.data_editor(display,use_container_width=True,hide_index=True,disabled=["Current Price","Day %","Market Value","Cost Basis","P/L","P/L %","Weight %"],key="portfolio_holdings_editor")
+    edited=st.data_editor(
+        display,
+        use_container_width=True,
+        hide_index=True,
+        disabled=["Current Price","Day %","Market Value","Cost Basis","P/L","P/L %","Weight %"],
+        column_config={
+            "Category": st.column_config.SelectboxColumn("Strategy", options=STRATEGIES),
+            "Sector": st.column_config.SelectboxColumn("Sector", options=[x for x in SECTORS if x != "Auto detect"]),
+            "Shares": st.column_config.NumberColumn(format="%.4f"),
+            "Avg Cost": st.column_config.NumberColumn(format="$%.2f"),
+            "Current Price": st.column_config.NumberColumn(format="$%.2f"),
+            "Day %": st.column_config.NumberColumn(format="%+.2f%%"),
+            "Market Value": st.column_config.NumberColumn(format="$%.2f"),
+            "P/L": st.column_config.NumberColumn(format="$%.2f"),
+            "P/L %": st.column_config.NumberColumn(format="%+.2f%%"),
+            "Weight %": st.column_config.NumberColumn(format="%.2f%%"),
+        },
+        key="portfolio_holdings_editor",
+    )
     if st.button("Save holdings edits"):
         base=edited[["Account","Ticker","Shares","Avg Cost","Category","Sector","Industry"]].copy(); save_portfolio(base); st.rerun()
 
@@ -389,8 +487,8 @@ def csv_import():
     )
     account_col = c4.selectbox("Account (optional)", ["(Use Manual)"] + columns)
     manual_account = st.text_input("Default Account", "Taxable")
-    category = st.selectbox("Default Strategy", ["Core ETF", "Dividend ETF", "Growth ETF", "Sector ETF", "Mega Cap", "AI Software", "Semiconductor", "Cloud / Data Center", "Cybersecurity", "Power / Grid", "Nuclear", "Defense / Aerospace", "Space", "Healthcare", "Financials", "Consumer", "Industrials", "Materials / Mining", "Energy", "Real Estate", "International", "Speculative", "Other"])
-    auto_classify = st.checkbox("Auto-detect sector and industry", value=True)
+    category = st.selectbox("Default Strategy", STRATEGIES, index=STRATEGIES.index("Other"))
+    auto_classify = st.checkbox("Auto-detect sector, industry, and strategy", value=True)
 
     cost_mode = st.radio(
         "Cost column meaning",
@@ -421,6 +519,8 @@ def csv_import():
                 profiles = {t: _security_profile(t) for t in converted["Ticker"].dropna().unique()}
             converted["Sector"] = converted["Ticker"].map(lambda t: profiles.get(t, {}).get("Sector", "Unknown"))
             converted["Industry"] = converted["Ticker"].map(lambda t: profiles.get(t, {}).get("Industry", "Unknown"))
+            if category == "Other":
+                converted["Category"] = converted["Ticker"].map(lambda t: _suggest_strategy(t, profiles.get(t, {})))
 
         # Exclude totals, cash rows, option descriptions, and malformed symbols.
         invalid_symbols = {"", "NAN", "NONE", "ACCOUNT TOTAL", "CASH", "CASH & CASH INVESTMENTS"}
