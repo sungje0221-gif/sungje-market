@@ -1,13 +1,13 @@
-Investment OS v3.07 verification
+Investment OS v3.08 verification
 
-Korean market source:
-- KOSPI: PyKRX / KRX index 1001
-- KOSDAQ: PyKRX / KRX index 2001
-- Samsung Electronics: PyKRX / KRX 005930
-- SK hynix: PyKRX / KRX 000660
-- USD/KRW: Yahoo Finance KRW=X
+Korean market data source:
+- KOSPI: Naver Finance domestic realtime endpoint
+- KOSDAQ: Naver Finance domestic realtime endpoint
+- Samsung Electronics (005930): Naver Finance domestic realtime endpoint
+- SK hynix (000660): Naver Finance domestic realtime endpoint
 
-Safety behavior:
-- No Yahoo fallback for Korean indices or Korean equities.
-- If PyKRX/KRX is unavailable, the UI displays — rather than stale data.
-- Korea panel displays the KRX as-of date.
+Safety:
+- No Yahoo Finance fallback for these four Korean instruments.
+- If Naver blocks or returns an invalid payload, the UI shows —.
+- Cache TTL is 60 seconds.
+- The Korea panel displays the source timestamp returned by Naver.

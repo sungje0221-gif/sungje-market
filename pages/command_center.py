@@ -9,7 +9,7 @@ import streamlit as st
 from components.cards import badge
 from engine.analysis import market_brief
 from engine.indicators import trend_score
-from engine.market_data import batch_history, batch_quotes, korea_quotes_krx
+from engine.market_data import batch_history, batch_quotes, korea_quotes_naver
 from utils.formatters import money, pct
 from utils.storage import load_json
 
@@ -162,7 +162,7 @@ def _group_panel(title: str, subtitle: str, items: dict[str, str], quotes: dict[
     source_note = ""
     if title == "Korea Market":
         as_of = dates[-1] if dates else "unavailable"
-        source_note = f'<div class="market-source">KRX close · {escape(as_of)}</div>'
+        source_note = f'<div class="market-source">Naver Finance · {escape(as_of)}</div>'
     return f"""
     <div class="market-group-panel">
       <div class="market-group-head"><span>{escape(subtitle)}</span><h3>{escape(title)}</h3></div>
@@ -183,13 +183,13 @@ def render() -> None:
     ))
     quote_map = batch_quotes(yahoo_tickers)
 
-    # KOSPI, KOSDAQ, Samsung Electronics and SK hynix come only from PyKRX/KRX.
+    # KOSPI, KOSDAQ, Samsung Electronics and SK hynix come only from Naver Finance.
     # There is intentionally no Yahoo fallback: unavailable is safer than stale.
-    krx = korea_quotes_krx()
-    quote_map["KRX:KOSPI"] = krx.get("KOSPI", {})
-    quote_map["KRX:KOSDAQ"] = krx.get("KOSDAQ", {})
-    quote_map["KRX:005930"] = krx.get("005930", {})
-    quote_map["KRX:000660"] = krx.get("000660", {})
+    korea = korea_quotes_naver()
+    quote_map["KRX:KOSPI"] = korea.get("KOSPI", {})
+    quote_map["KRX:KOSDAQ"] = korea.get("KOSDAQ", {})
+    quote_map["KRX:005930"] = korea.get("005930", {})
+    quote_map["KRX:000660"] = korea.get("000660", {})
 
     histories = batch_history(tuple(watch_tickers + ["SPY", "QQQ"] + list(TOP_MARKET.values())), period="6mo", interval="1d")
     market_score = round((_score_from_frame(histories.get("SPY")) + _score_from_frame(histories.get("QQQ"))) / 2, 1)

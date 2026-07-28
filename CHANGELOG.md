@@ -1,3 +1,9 @@
+## v3.08 — Naver Finance Korea data
+- Replaced PyKRX with Naver Finance realtime domestic endpoints for KOSPI, KOSDAQ, Samsung Electronics, and SK hynix.
+- Reduced Korea quote cache to 60 seconds.
+- Kept fail-closed behavior: no Yahoo fallback and no stale substitution.
+- Removed the PyKRX dependency.
+
 # Changelog
 
 ## v2.05
