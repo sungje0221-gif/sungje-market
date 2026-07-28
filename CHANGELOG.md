@@ -65,3 +65,10 @@
 - Redesigned Today’s Priority cards into a denser two-column layout with larger typography and mini sparklines.
 - Added Silver to Macro & Commodities.
 - Replaced EWY/KORU/SKHY in Korea Market with Samsung Electronics (005930) and SK hynix (000660).
+
+
+## v3.07 — Korean market source correction
+- Replaced Yahoo Finance for KOSPI, KOSDAQ, Samsung Electronics, and SK hynix with PyKRX/KRX daily closes.
+- Added the KRX closing date to the Korea panel.
+- Removed stale-data fallback: if KRX is unavailable, the panel shows an em dash instead of a Yahoo value.
+- USD/KRW remains sourced separately from Yahoo Finance.

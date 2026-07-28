@@ -12,6 +12,96 @@ from engine.schwab import SchwabError, access_token, connection_status
 SCHWAB_MARKETDATA_BASE_URL = "https://api.schwabapi.com/marketdata/v1"
 
 
+# Korean market data is intentionally isolated from Yahoo Finance.
+# If PyKRX/KRX is unavailable, the dashboard shows no value rather than a stale value.
+try:
+    from pykrx import stock as krx_stock
+except Exception:  # dependency/network availability is handled at runtime
+    krx_stock = None
+
+
+def _empty_quote(source: str = "Unavailable") -> dict[str, Any]:
+    return {
+        "price": None, "change_pct": None, "volume": None,
+        "bid": None, "ask": None, "last": None, "mark": None,
+        "source": source, "as_of": None,
+    }
+
+
+def _krx_last_quote(frame: pd.DataFrame, source: str) -> dict[str, Any]:
+    if frame is None or frame.empty:
+        return _empty_quote(source)
+
+    close_col = "종가" if "종가" in frame.columns else "Close" if "Close" in frame.columns else None
+    if close_col is None:
+        return _empty_quote(source)
+
+    close = pd.to_numeric(frame[close_col], errors="coerce").dropna()
+    if close.empty:
+        return _empty_quote(source)
+
+    price = float(close.iloc[-1])
+    previous = float(close.iloc[-2]) if len(close) > 1 else None
+    if "등락률" in frame.columns:
+        changes = pd.to_numeric(frame["등락률"], errors="coerce").dropna()
+        change_pct = float(changes.iloc[-1]) if not changes.empty else None
+    else:
+        change_pct = ((price / previous) - 1) * 100 if previous else None
+
+    volume = None
+    if "거래량" in frame.columns:
+        volumes = pd.to_numeric(frame["거래량"], errors="coerce").dropna()
+        volume = float(volumes.iloc[-1]) if not volumes.empty else None
+
+    last_index = frame.index[-1]
+    try:
+        as_of = pd.Timestamp(last_index).strftime("%Y-%m-%d")
+    except Exception:
+        as_of = str(last_index)
+
+    return {
+        "price": price, "change_pct": change_pct, "volume": volume,
+        "bid": None, "ask": None, "last": price, "mark": price,
+        "source": source, "as_of": as_of,
+    }
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def korea_quotes_krx() -> dict[str, dict[str, Any]]:
+    """Return latest KRX daily closes for KOSPI/KOSDAQ/Samsung/SK hynix.
+
+    This function fails closed: it never falls back to Yahoo Finance. A missing
+    KRX response is displayed as unavailable instead of showing stale prices.
+    """
+    keys = ("KOSPI", "KOSDAQ", "005930", "000660")
+    result = {key: _empty_quote("PyKRX / KRX unavailable") for key in keys}
+    if krx_stock is None:
+        return result
+
+    try:
+        now_kst = pd.Timestamp.now(tz="Asia/Seoul")
+        end = now_kst.strftime("%Y%m%d")
+        start = (now_kst - pd.Timedelta(days=20)).strftime("%Y%m%d")
+
+        # PyKRX uses 1001 for the headline KOSPI index and 2001 for KOSDAQ.
+        result["KOSPI"] = _krx_last_quote(
+            krx_stock.get_index_ohlcv(start, end, "1001"), "PyKRX / KRX"
+        )
+        result["KOSDAQ"] = _krx_last_quote(
+            krx_stock.get_index_ohlcv(start, end, "2001"), "PyKRX / KRX"
+        )
+        result["005930"] = _krx_last_quote(
+            krx_stock.get_market_ohlcv(start, end, "005930"), "PyKRX / KRX"
+        )
+        result["000660"] = _krx_last_quote(
+            krx_stock.get_market_ohlcv(start, end, "000660"), "PyKRX / KRX"
+        )
+    except Exception:
+        # Deliberately retain unavailable values; wrong/stale values are worse.
+        return result
+    return result
+
+
 def _normalize_download(data: pd.DataFrame) -> pd.DataFrame:
     if isinstance(data.columns, pd.MultiIndex):
         data.columns = data.columns.get_level_values(0)

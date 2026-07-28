@@ -9,7 +9,7 @@ import streamlit as st
 from components.cards import badge
 from engine.analysis import market_brief
 from engine.indicators import trend_score
-from engine.market_data import batch_history, batch_quotes, direct_daily_quote
+from engine.market_data import batch_history, batch_quotes, korea_quotes_krx
 from utils.formatters import money, pct
 from utils.storage import load_json
 
@@ -41,10 +41,10 @@ MACRO = {
 }
 
 KOREA = {
-    "KOSPI": "^KS11",
-    "KOSDAQ": "^KQ11",
-    "삼성전자 (005930)": "005930.KS",
-    "SK하이닉스 (000660)": "000660.KS",
+    "KOSPI": "KRX:KOSPI",
+    "KOSDAQ": "KRX:KOSDAQ",
+    "삼성전자 (005930)": "KRX:005930",
+    "SK하이닉스 (000660)": "KRX:000660",
     "USD/KRW": "KRW=X",
 }
 
@@ -158,10 +158,16 @@ def _group_panel(title: str, subtitle: str, items: dict[str, str], quotes: dict[
             f'<em class="{css}">{pct(change)}</em>'
             '</div>'
         )
+    dates = sorted({str(quotes.get(ticker, {}).get("as_of")) for ticker in items.values() if quotes.get(ticker, {}).get("as_of")})
+    source_note = ""
+    if title == "Korea Market":
+        as_of = dates[-1] if dates else "unavailable"
+        source_note = f'<div class="market-source">KRX close · {escape(as_of)}</div>'
     return f"""
     <div class="market-group-panel">
       <div class="market-group-head"><span>{escape(subtitle)}</span><h3>{escape(title)}</h3></div>
       {''.join(rows)}
+      {source_note}
     </div>
     """
 
@@ -170,18 +176,20 @@ def render() -> None:
     now = datetime.now(ZoneInfo("America/Los_Angeles"))
     watch_tickers = _watchlist_tickers(12)
 
-    all_tickers = tuple(dict.fromkeys(
-        list(TOP_MARKET.values()) + list(FUTURES.values()) + list(MACRO.values()) + list(KOREA.values()) + watch_tickers
+    yahoo_tickers = tuple(dict.fromkeys(
+        list(TOP_MARKET.values()) + list(FUTURES.values()) + list(MACRO.values())
+        + [ticker for ticker in KOREA.values() if not ticker.startswith("KRX:")]
+        + watch_tickers
     ))
-    quote_map = batch_quotes(all_tickers)
+    quote_map = batch_quotes(yahoo_tickers)
 
-    # Korean indexes and equities are fetched independently. Yahoo's multi-symbol
-    # daily response can refresh those symbols unevenly, which previously produced
-    # mismatched prices and daily percentages in this panel.
-    for korea_ticker in KOREA.values():
-        korea_quote = direct_daily_quote(korea_ticker)
-        if korea_quote.get("price") is not None:
-            quote_map[korea_ticker] = korea_quote
+    # KOSPI, KOSDAQ, Samsung Electronics and SK hynix come only from PyKRX/KRX.
+    # There is intentionally no Yahoo fallback: unavailable is safer than stale.
+    krx = korea_quotes_krx()
+    quote_map["KRX:KOSPI"] = krx.get("KOSPI", {})
+    quote_map["KRX:KOSDAQ"] = krx.get("KOSDAQ", {})
+    quote_map["KRX:005930"] = krx.get("005930", {})
+    quote_map["KRX:000660"] = krx.get("000660", {})
 
     histories = batch_history(tuple(watch_tickers + ["SPY", "QQQ"] + list(TOP_MARKET.values())), period="6mo", interval="1d")
     market_score = round((_score_from_frame(histories.get("SPY")) + _score_from_frame(histories.get("QQQ"))) / 2, 1)
@@ -227,7 +235,7 @@ def render() -> None:
         .market-group-panel{{border-radius:15px;padding:18px 18px;background:linear-gradient(180deg,rgba(13,29,48,.98),rgba(8,20,34,.98));border:1px solid rgba(148,163,184,.14)}}
         .market-group-head span{{font-size:10px;letter-spacing:.14em;color:#6f89a5;font-weight:900}}.market-group-head h3{{font-size:20px!important;margin:3px 0 10px!important}}
         .market-row{{display:grid;grid-template-columns:1.15fr .9fr .65fr;gap:7px;align-items:center;padding:9px 0;border-top:1px solid rgba(148,163,184,.08);font-size:13px}}
-        .market-row span{{color:#b8c8d8;font-size:13px}}.market-row b{{text-align:right;font-size:14px;white-space:nowrap}}.market-row em{{text-align:right;font-style:normal;font-size:12px;font-weight:850}}
+        .market-row span{{color:#b8c8d8;font-size:13px}}.market-row b{{text-align:right;font-size:14px;white-space:nowrap}}.market-row em{{text-align:right;font-style:normal;font-size:12px;font-weight:850}}.market-source{{margin-top:9px;padding-top:8px;border-top:1px solid rgba(148,163,184,.08);font-size:10px;color:#6f89a5;text-align:right}}
         .compact-brief{{margin-top:12px;padding:12px 14px!important;min-height:auto!important}}.compact-brief .ai-brief-copy{{font-size:11px!important;line-height:1.55!important}}
         @media(max-width:1200px){{.command-top-strip{{grid-template-columns:repeat(4,minmax(90px,1fr))}}}}
         @media(max-width:900px){{.command-top-strip{{grid-template-columns:repeat(2,minmax(0,1fr));margin-top:12px}}.command-hero .hero-row{{display:block!important}}}}

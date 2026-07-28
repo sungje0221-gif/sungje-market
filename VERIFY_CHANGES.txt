@@ -1,18 +1,13 @@
-Investment OS v3.06 - VERIFIED CHANGES
+Investment OS v3.07 verification
 
-Command Center:
-- Priority cards use a 2-column layout with larger price text and right-side sparkline/signal.
-- Macro includes Silver (SI=F).
-- Korea includes Samsung Electronics (005930.KS) and SK hynix (000660.KS).
-- EWY and KORU are not shown in the Command Center Korea panel.
+Korean market source:
+- KOSPI: PyKRX / KRX index 1001
+- KOSDAQ: PyKRX / KRX index 2001
+- Samsung Electronics: PyKRX / KRX 005930
+- SK hynix: PyKRX / KRX 000660
+- USD/KRW: Yahoo Finance KRW=X
 
-Deployment check:
-- Browser title should show v3.06.
-- Sidebar should show INVESTMENT OS v3.06.
-- If v3.03/v3.04 is still visible, the deployed GitHub files were not replaced.
-
-V3.06 verification
-- Greeting market boxes use larger type and include mini trend lines.
-- Global Pulse panels use larger, readable text and spacing.
-- Korea symbols are fetched independently from Yahoo daily history, not the batch response.
-- Korea rows: KOSPI, KOSDAQ, 삼성전자 005930, SK하이닉스 000660, USD/KRW.
+Safety behavior:
+- No Yahoo fallback for Korean indices or Korean equities.
+- If PyKRX/KRX is unavailable, the UI displays — rather than stale data.
+- Korea panel displays the KRX as-of date.
