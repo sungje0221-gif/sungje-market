@@ -6,7 +6,7 @@ import streamlit as st
 from components.sidebar import render_sidebar
 from components.theme import inject_dashboard_v092, inject_heatmap_v093, inject_theme, inject_v098, inject_v301
 
-APP_VERSION = "3.05"
+APP_VERSION = "3.06"
 
 st.set_page_config(
     page_title=f"Sungje Investment OS v{APP_VERSION}",

@@ -9,7 +9,7 @@ import streamlit as st
 from components.cards import badge
 from engine.analysis import market_brief
 from engine.indicators import trend_score
-from engine.market_data import batch_history, batch_quotes
+from engine.market_data import batch_history, batch_quotes, direct_daily_quote
 from utils.formatters import money, pct
 from utils.storage import load_json
 
@@ -43,8 +43,8 @@ MACRO = {
 KOREA = {
     "KOSPI": "^KS11",
     "KOSDAQ": "^KQ11",
-    "Samsung (005930)": "005930.KS",
-    "SK hynix (000660)": "000660.KS",
+    "삼성전자 (005930)": "005930.KS",
+    "SK하이닉스 (000660)": "000660.KS",
     "USD/KRW": "KRW=X",
 }
 
@@ -56,7 +56,7 @@ def _fmt_price(label: str, price: float | None) -> str:
         return f"{price:.2f}%"
     if label == "USD/KRW":
         return f"₩{price:,.2f}"
-    if label in {"Samsung (005930)", "SK hynix (000660)"}:
+    if label in {"삼성전자 (005930)", "SK하이닉스 (000660)"}:
         return f"₩{price:,.0f}"
     if label in {"S&P 500", "NASDAQ", "Russell", "VIX", "S&P", "Nasdaq", "Dow", "KOSPI", "KOSDAQ"}:
         return f"{price:,.2f}"
@@ -95,13 +95,14 @@ def _priority_tag(score: float, change: float | None) -> tuple[str, str]:
     return "WATCH", "watch"
 
 
-def _top_quote(label: str, ticker: str, data: dict) -> str:
+def _top_quote(label: str, ticker: str, data: dict, frame=None) -> str:
     change = data.get("change_pct")
     css = "up" if (change or 0) >= 0 else "down"
+    spark = _sparkline_svg(frame, (change or 0) >= 0).replace("priority-spark", "top-spark")
     return (
         '<div class="top-quote">'
         f'<span>{escape(label)}</span><b>{_fmt_price(label, data.get("price"))}</b>'
-        f'<em class="{css}">{pct(change)}</em></div>'
+        f'<em class="{css}">{pct(change)}</em>{spark}</div>'
     )
 
 
@@ -174,7 +175,15 @@ def render() -> None:
     ))
     quote_map = batch_quotes(all_tickers)
 
-    histories = batch_history(tuple(watch_tickers + ["SPY", "QQQ"]), period="6mo", interval="1d")
+    # Korean indexes and equities are fetched independently. Yahoo's multi-symbol
+    # daily response can refresh those symbols unevenly, which previously produced
+    # mismatched prices and daily percentages in this panel.
+    for korea_ticker in KOREA.values():
+        korea_quote = direct_daily_quote(korea_ticker)
+        if korea_quote.get("price") is not None:
+            quote_map[korea_ticker] = korea_quote
+
+    histories = batch_history(tuple(watch_tickers + ["SPY", "QQQ"] + list(TOP_MARKET.values())), period="6mo", interval="1d")
     market_score = round((_score_from_frame(histories.get("SPY")) + _score_from_frame(histories.get("QQQ"))) / 2, 1)
 
     vix = quote_map.get("^VIX", {})
@@ -185,7 +194,7 @@ def render() -> None:
     state_tone = "positive" if state == "RISK ON" else "negative" if state == "DEFENSIVE" else "neutral"
 
     greeting = "Morning" if now.hour < 12 else "Afternoon" if now.hour < 18 else "Evening"
-    top_quotes = "".join(_top_quote(label, ticker, quote_map.get(ticker, {})) for label, ticker in TOP_MARKET.items())
+    top_quotes = "".join(_top_quote(label, ticker, quote_map.get(ticker, {}), histories.get(ticker)) for label, ticker in TOP_MARKET.items())
     fear_html = (
         '<div class="top-quote">'
         '<span>Fear & Greed</span>'
@@ -196,16 +205,17 @@ def render() -> None:
     st.markdown(
         f"""
         <style>
-        .command-hero{{padding:15px 18px!important;margin-bottom:14px!important}}
+        .command-hero{{padding:17px 18px!important;margin-bottom:14px!important}}
         .command-hero .hero-row{{align-items:center!important}}
-        .command-hero .hero-copy{{min-width:265px}}
+        .command-hero .hero-copy{{min-width:245px}}
         .command-hero .hero-title{{font-size:26px!important;margin-top:1px!important}}
         .command-hero .hero-sub{{font-size:11px!important;margin-top:3px!important}}
-        .command-top-strip{{display:grid;grid-template-columns:repeat(7,minmax(82px,1fr));gap:6px;flex:1}}
-        .top-quote{{padding:8px 9px;border-radius:10px;background:rgba(5,15,27,.58);border:1px solid rgba(111,143,178,.17);min-width:0}}
-        .top-quote span{{display:block;font-size:8px;color:#7890a8;text-transform:uppercase;letter-spacing:.08em;white-space:nowrap}}
-        .top-quote b{{display:block;font-size:13px;margin-top:2px;white-space:nowrap}}
-        .top-quote em{{display:block;font-style:normal;font-size:9px;margin-top:1px}}
+        .command-top-strip{{display:grid;grid-template-columns:repeat(7,minmax(105px,1fr));gap:8px;flex:1}}
+        .top-quote{{padding:10px 11px 8px;border-radius:11px;background:rgba(5,15,27,.68);border:1px solid rgba(111,143,178,.20);min-width:0;min-height:82px}}
+        .top-quote span{{display:block;font-size:9px;color:#7890a8;text-transform:uppercase;letter-spacing:.08em;white-space:nowrap}}
+        .top-quote b{{display:block;font-size:16px;margin-top:3px;white-space:nowrap}}
+        .top-quote em{{display:block;font-style:normal;font-size:10px;margin-top:1px;font-weight:850}}
+        .top-spark{{width:100%;height:18px;margin-top:4px;overflow:visible}}.top-spark polyline,.top-spark path{{fill:none;stroke:#7c8ea2;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;opacity:.9}}.top-spark.spark-up polyline{{stroke:#35d6a5}}.top-spark.spark-down polyline{{stroke:#ff6474}}
         .priority-grid-note{{font-size:9px;color:#70869c;margin-top:-5px;margin-bottom:8px}}
         .priority-card{{min-height:88px;padding:12px 13px;border-radius:13px;background:linear-gradient(180deg,rgba(14,30,49,.98),rgba(7,18,31,.98));border:1px solid rgba(148,163,184,.14);display:grid;grid-template-columns:minmax(0,1fr) 126px;gap:12px;align-items:center}}
         .priority-left{{min-width:0}}.priority-right{{display:flex;flex-direction:column;align-items:flex-end;justify-content:space-between;min-height:62px}}
@@ -214,10 +224,10 @@ def render() -> None:
         .priority-spark{{width:120px;height:34px;overflow:visible}}.priority-spark polyline,.priority-spark path{{fill:none;stroke:#7c8ea2;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;opacity:.92}}.priority-spark.spark-up polyline{{stroke:#35d6a5}}.priority-spark.spark-down polyline{{stroke:#ff6474}}
         .priority-tag{{display:inline-block;font-size:9px;font-weight:900;letter-spacing:.09em;padding:3px 9px;border-radius:999px;background:rgba(100,166,255,.09);color:#64a6ff}}
         .priority-tag.buy{{color:#35d6a5;background:rgba(53,214,165,.09)}}.priority-tag.risk{{color:#ff6474;background:rgba(255,100,116,.09)}}.priority-tag.move{{color:#f3c969;background:rgba(243,201,105,.09)}}
-        .market-group-panel{{border-radius:15px;padding:13px 14px;background:linear-gradient(180deg,rgba(13,29,48,.98),rgba(8,20,34,.98));border:1px solid rgba(148,163,184,.14)}}
-        .market-group-head span{{font-size:8px;letter-spacing:.14em;color:#6f89a5;font-weight:900}}.market-group-head h3{{font-size:17px!important;margin:1px 0 7px!important}}
-        .market-row{{display:grid;grid-template-columns:1.15fr .9fr .65fr;gap:7px;align-items:center;padding:6px 0;border-top:1px solid rgba(148,163,184,.08);font-size:10px}}
-        .market-row span{{color:#a9bacb}}.market-row b{{text-align:right;font-size:11px;white-space:nowrap}}.market-row em{{text-align:right;font-style:normal;font-size:9px;font-weight:850}}
+        .market-group-panel{{border-radius:15px;padding:18px 18px;background:linear-gradient(180deg,rgba(13,29,48,.98),rgba(8,20,34,.98));border:1px solid rgba(148,163,184,.14)}}
+        .market-group-head span{{font-size:10px;letter-spacing:.14em;color:#6f89a5;font-weight:900}}.market-group-head h3{{font-size:20px!important;margin:3px 0 10px!important}}
+        .market-row{{display:grid;grid-template-columns:1.15fr .9fr .65fr;gap:7px;align-items:center;padding:9px 0;border-top:1px solid rgba(148,163,184,.08);font-size:13px}}
+        .market-row span{{color:#b8c8d8;font-size:13px}}.market-row b{{text-align:right;font-size:14px;white-space:nowrap}}.market-row em{{text-align:right;font-style:normal;font-size:12px;font-weight:850}}
         .compact-brief{{margin-top:12px;padding:12px 14px!important;min-height:auto!important}}.compact-brief .ai-brief-copy{{font-size:11px!important;line-height:1.55!important}}
         @media(max-width:1200px){{.command-top-strip{{grid-template-columns:repeat(4,minmax(90px,1fr))}}}}
         @media(max-width:900px){{.command-top-strip{{grid-template-columns:repeat(2,minmax(0,1fr));margin-top:12px}}.command-hero .hero-row{{display:block!important}}}}
@@ -252,7 +262,7 @@ def render() -> None:
                 st.markdown(_priority_card(ticker, score, data, histories.get(ticker)), unsafe_allow_html=True)
 
     st.markdown('<div class="section-heading"><div><span>GLOBAL PULSE</span><h3>Futures · Macro · Korea</h3></div><em>One-screen market context</em></div>', unsafe_allow_html=True)
-    groups = [("US Futures", "OVERNIGHT DIRECTION", FUTURES), ("Macro & Commodities", "RATES · FX · COMMODITIES", MACRO), ("Korea Market", "KOSPI · FX · LEADERS", KOREA)]
+    groups = [("US Futures", "OVERNIGHT DIRECTION", FUTURES), ("Macro & Commodities", "RATES · FX · COMMODITIES", MACRO), ("Korea Market", "KOSPI · KOSDAQ · LEADERS", KOREA)]
     for col, (title, subtitle, items) in zip(st.columns(3), groups):
         with col:
             st.markdown(_group_panel(title, subtitle, items, quote_map), unsafe_allow_html=True)

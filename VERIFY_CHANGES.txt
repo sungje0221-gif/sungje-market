@@ -1,4 +1,4 @@
-Investment OS v3.05 - VERIFIED CHANGES
+Investment OS v3.06 - VERIFIED CHANGES
 
 Command Center:
 - Priority cards use a 2-column layout with larger price text and right-side sparkline/signal.
@@ -7,6 +7,12 @@ Command Center:
 - EWY and KORU are not shown in the Command Center Korea panel.
 
 Deployment check:
-- Browser title should show v3.05.
-- Sidebar should show INVESTMENT OS v3.05.
+- Browser title should show v3.06.
+- Sidebar should show INVESTMENT OS v3.06.
 - If v3.03/v3.04 is still visible, the deployed GitHub files were not replaced.
+
+V3.06 verification
+- Greeting market boxes use larger type and include mini trend lines.
+- Global Pulse panels use larger, readable text and spacing.
+- Korea symbols are fetched independently from Yahoo daily history, not the batch response.
+- Korea rows: KOSPI, KOSDAQ, 삼성전자 005930, SK하이닉스 000660, USD/KRW.

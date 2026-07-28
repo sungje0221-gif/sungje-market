@@ -221,3 +221,40 @@ def batch_history(tickers: tuple[str, ...], period: str = "1y", interval: str = 
     except Exception:
         pass
     return out
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def direct_daily_quote(ticker: str) -> dict[str, Any]:
+    """Fetch one symbol independently and calculate change from adjacent daily closes.
+
+    This is deliberately separate from the batch downloader for markets whose
+    Yahoo multi-symbol response can occasionally map or refresh unevenly.
+    """
+    empty = {
+        "price": None, "change_pct": None, "volume": None,
+        "bid": None, "ask": None, "last": None, "mark": None,
+        "source": "Unavailable",
+    }
+    try:
+        frame = yf.Ticker(ticker).history(
+            period="10d", interval="1d", auto_adjust=False, actions=False
+        )
+        if frame is None or frame.empty or "Close" not in frame:
+            return dict(empty)
+        close = frame["Close"].dropna()
+        if close.empty:
+            return dict(empty)
+        price = float(close.iloc[-1])
+        previous = float(close.iloc[-2]) if len(close) > 1 else price
+        volume = None
+        if "Volume" in frame and not frame["Volume"].dropna().empty:
+            volume = float(frame["Volume"].dropna().iloc[-1])
+        return {
+            "price": price,
+            "change_pct": ((price / previous) - 1) * 100 if previous else 0.0,
+            "volume": volume,
+            "bid": None, "ask": None, "last": price, "mark": price,
+            "source": "Yahoo Finance individual daily",
+        }
+    except Exception:
+        return dict(empty)
