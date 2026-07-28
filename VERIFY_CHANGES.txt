@@ -1,7 +1,9 @@
-Investment OS v3.11 verification
+Investment OS v3.12 verification
 
-1. Sidebar version says v3.11.
-2. Watchlist caption states that charts use actual 30 trading-day closes.
-3. Cards display 20D RETURN and RSI 14.
-4. Cards display RULE SCORE, not a claimed opaque AI score.
-5. Missing price history displays NO DATA / —; no random or fabricated fallback is used.
+Open Watchlist, select any card, and confirm the detail page shows:
+- Range / candle selector starting with 1D · 1m
+- 5D · 5m option
+- Actual intraday candlesticks with time labels
+- Latest-bar caption and 30-second cache note
+
+No random candle data is used.

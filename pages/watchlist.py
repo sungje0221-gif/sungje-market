@@ -7,13 +7,21 @@ from components.cards import stars
 from components.charts import advanced_chart
 from engine.analysis import analyze
 from engine.fundamentals import days_to_earnings, fundamental_score, ticker_info
-from engine.market_data import batch_history, batch_quotes, history, quote
+from engine.market_data import batch_history, batch_quotes, history, intraday_history, quote
 from utils.formatters import compact, money
 from utils.watchlist_store import delete_watchlist_item, load_watchlist_data, save_watchlist_data, storage_status
 
 DEFAULT = ["GOOGL","META","AMZN","MSFT","AAPL","NVDA","AVGO","SMH","CEG","VRT","ETN","ANET","SKHY","SPCX"]
 TAGS = ["Watch", "Long-term", "Swing", "Trade", "ETF", "AI", "Dividend", "High Risk"]
-PERIODS = {"1M": ("1mo", "1d"), "3M": ("3mo", "1d"), "6M": ("6mo", "1d"), "1Y": ("1y", "1d"), "5Y": ("5y", "1wk")}
+PERIODS = {
+    "1D · 1m": ("1d", "1m"),
+    "5D · 5m": ("5d", "5m"),
+    "1M · 1d": ("1mo", "1d"),
+    "3M · 1d": ("3mo", "1d"),
+    "6M · 1d": ("6mo", "1d"),
+    "1Y · 1d": ("1y", "1d"),
+    "5Y · 1wk": ("5y", "1wk"),
+}
 
 
 def _color(value: float | None) -> str:
@@ -39,18 +47,33 @@ def _detail(ticker: str, records: list[dict]) -> None:
     stats[4].metric("Target", money(row.get("target_price")))
     stats[5].metric("Earnings", "—" if days_to_earnings(ticker) is None else f'D{days_to_earnings(ticker):+d}')
 
-    period_label = st.radio("Range", list(PERIODS), horizontal=True, index=3, key=f"range_{ticker}")
+    period_label = st.radio("Range / candle", list(PERIODS), horizontal=True, index=0, key=f"range_{ticker}")
     period, interval = PERIODS[period_label]
-    chart_df = history(ticker, period, interval)
+    is_intraday = interval in {"1m", "5m"}
+    chart_df = intraday_history(ticker, period, interval) if is_intraday else history(ticker, period, interval)
+
     if not chart_df.empty:
+        if is_intraday:
+            latest = chart_df.index[-1]
+            latest_text = latest.strftime("%b %d, %I:%M %p") if hasattr(latest, "strftime") else str(latest)
+            st.caption(f"Actual {interval} OHLCV candles · Regular session · Latest bar: {latest_text} · 30-second cache")
         st.plotly_chart(
             advanced_chart(
-                chart_df, ticker, show_ma20=True, show_ma50=True,
-                show_ma100=False, show_ma200=True, show_bollinger=False,
-                show_volume=True, show_rsi=True, show_macd=False,
+                chart_df, ticker,
+                show_ma20=True,
+                show_ma50=not is_intraday,
+                show_ma100=False,
+                show_ma200=not is_intraday,
+                show_bollinger=False,
+                show_volume=True,
+                show_rsi=not is_intraday,
+                show_macd=False,
+                intraday=is_intraday,
             ),
             use_container_width=True,
         )
+    else:
+        st.warning(f"No {interval} chart data is currently available for {ticker}. Try another range.")
 
     with st.expander("Edit investment card", expanded=False):
         with st.form(f"edit_{ticker}"):

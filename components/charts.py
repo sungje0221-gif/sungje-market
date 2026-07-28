@@ -16,6 +16,7 @@ def advanced_chart(
     show_volume=True,
     show_rsi=True,
     show_macd=True,
+    intraday=False,
 ):
     if df.empty:
         return go.Figure()
@@ -90,7 +91,7 @@ def advanced_chart(
         fig.add_trace(go.Bar(x=df.index, y=histogram, name="MACD Hist", opacity=0.55), row=row, col=1)
 
     fig.update_layout(
-        height=820,
+        height=720 if intraday else 820,
         template="plotly_dark",
         xaxis_rangeslider_visible=False,
         margin=dict(l=5, r=5, t=35, b=5),
@@ -99,6 +100,16 @@ def advanced_chart(
         legend_orientation="h",
         hovermode="x unified",
     )
+    if intraday:
+        # Remove overnight/weekend gaps so one trading session fills the chart.
+        fig.update_xaxes(
+            rangebreaks=[
+                dict(bounds=["sat", "mon"]),
+                dict(bounds=[16, 9.5], pattern="hour"),
+            ],
+            tickformat="%I:%M %p",
+            nticks=12,
+        )
     return fig
 
 

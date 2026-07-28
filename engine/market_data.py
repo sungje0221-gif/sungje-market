@@ -17,7 +17,7 @@ SCHWAB_MARKETDATA_BASE_URL = "https://api.schwabapi.com/marketdata/v1"
 # from Streamlit Cloud and exposes the exchange-local price/change timestamp.
 NAVER_REALTIME_BASE_URL = "https://polling.finance.naver.com/api/realtime/domestic"
 NAVER_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (compatible; InvestmentOS/3.11)",
+    "User-Agent": "Mozilla/5.0 (compatible; InvestmentOS/3.12)",
     "Accept": "application/json, text/plain, */*",
     "Referer": "https://finance.naver.com/",
 }
@@ -115,6 +115,31 @@ def _normalize_download(data: pd.DataFrame) -> pd.DataFrame:
     if isinstance(data.columns, pd.MultiIndex):
         data.columns = data.columns.get_level_values(0)
     return data.dropna(how="all")
+
+
+@st.cache_data(ttl=30, show_spinner=False)
+def intraday_history(ticker: str, period: str = "1d", interval: str = "1m") -> pd.DataFrame:
+    """Short-cache intraday OHLCV for detailed charts.
+
+    Yahoo supports 1-minute data only for recent sessions, so this function is
+    deliberately separate from the longer-lived daily-history cache.
+    """
+    allowed = {("1d", "1m"), ("5d", "5m")}
+    if (period, interval) not in allowed:
+        return pd.DataFrame()
+    try:
+        data = yf.download(
+            ticker,
+            period=period,
+            interval=interval,
+            auto_adjust=False,
+            progress=False,
+            prepost=False,
+            threads=False,
+        )
+        return _normalize_download(data)
+    except Exception:
+        return pd.DataFrame()
 
 
 @st.cache_data(ttl=300, show_spinner=False)
