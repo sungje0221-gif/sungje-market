@@ -1,0 +1,11 @@
+InvestmentOS v3.17 Transactions
+
+1. Extract this ZIP.
+2. Upload/replace the extracted project files in the GitHub sungje-market repository.
+3. Commit and push the changes.
+4. Streamlit will redeploy automatically if connected to GitHub.
+
+Main changes:
+- pages/portfolio.py
+- data/transactions.csv
+- CHANGELOG.md

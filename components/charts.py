@@ -182,7 +182,10 @@ def stock_heatmap(df, title="Market Heat Map"):
     change_text = [f"{value:+.2f}%" for value in changes]
 
     fig = go.Figure(go.Treemap(
+        ids=labels,
         labels=labels,
+        # Keep every ticker at the root level. This prevents Plotly's
+        # hierarchical drill-down/zoom while preserving market-cap sizing.
         parents=[""] * len(labels),
         values=values,
         marker=dict(
@@ -210,6 +213,9 @@ def stock_heatmap(df, title="Market Heat Map"):
         ),
         pathbar=dict(visible=False),
         tiling=dict(packing="squarify", pad=2),
+        branchvalues="total",
+        sort=True,
+        maxdepth=1,
     ))
     fig.update_layout(
         title=title,
@@ -218,6 +224,9 @@ def stock_heatmap(df, title="Market Heat Map"):
         paper_bgcolor="#0c1828",
         plot_bgcolor="#0c1828",
         template="plotly_dark",
+        # Preserve the same treemap layout across Streamlit reruns triggered
+        # by a ticker click; only the detail panel should update.
+        uirevision=f"heatmap-{title}",
     )
     return fig
 

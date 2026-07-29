@@ -3,15 +3,11 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 import plotly.graph_objects as go
+from streamlit_plotly_events import plotly_events
 
-try:
-    from streamlit_plotly_events import plotly_events
-except ImportError:
-    plotly_events = None
-
-from components.charts import market_breadth_bar, performance_matrix, stock_heatmap
+from components.charts import advanced_chart, market_breadth_bar, performance_matrix, stock_heatmap
 from engine.fundamentals import ticker_info
-from engine.market_data import batch_quotes, history, quote
+from engine.market_data import batch_quotes, history, intraday_history, quote
 from utils.storage import load_json
 
 GROUPS = {
@@ -34,6 +30,37 @@ SECTOR_GROUPS = {
     "Space & Defense": ["RKLB","ASTS","LUNR","PL","KTOS","LMT","RTX","NOC","GD","BA","ACHR","JOBY"],
 }
 
+
+CHART_RANGES = {
+    "1D": "1d",
+    "5D": "5d",
+    "1M": "1mo",
+    "3M": "3mo",
+    "6M": "6mo",
+    "1Y": "1y",
+    "5Y": "5y",
+}
+
+CANDLES_BY_RANGE = {
+    "1D": ["1m", "2m", "5m", "15m", "30m", "60m", "1d"],
+    "5D": ["1m", "2m", "5m", "15m", "30m", "60m", "1d"],
+    "1M": ["5m", "15m", "30m", "60m", "1d"],
+    "3M": ["60m", "1d"],
+    "6M": ["1d"],
+    "1Y": ["1d"],
+    "5Y": ["1d"],
+}
+
+DEFAULT_CANDLE = {
+    "1D": "1m",
+    "5D": "5m",
+    "1M": "60m",
+    "3M": "1d",
+    "6M": "1d",
+    "1Y": "1d",
+    "5Y": "1d",
+}
+
 SECTOR_ETFS = {
     "Technology": "XLK", "Communication": "XLC", "Consumer Discretionary": "XLY",
     "Financials": "XLF", "Industrials": "XLI", "Healthcare": "XLV",
@@ -42,7 +69,7 @@ SECTOR_ETFS = {
 }
 
 
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=20, show_spinner=False)
 def build_rows(tickers: tuple[str, ...], sector_name: str | None = None) -> pd.DataFrame:
     # 배치 시세 및 시가총액 정보 로드
     quote_map = batch_quotes(tickers)
@@ -64,7 +91,7 @@ def build_rows(tickers: tuple[str, ...], sector_name: str | None = None) -> pd.D
     return pd.DataFrame(rows)
 
 
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=20, show_spinner=False)
 def sector_snapshot() -> pd.DataFrame:
     tickers = tuple(SECTOR_ETFS.values())
     quote_map = batch_quotes(tickers)
@@ -129,37 +156,67 @@ def _render_ticker_detail(ticker: str):
     q = quote(ticker)
     info = ticker_info(ticker)
     change = q.get("change_pct")
-    tone = "#ff5d73" if isinstance(change, (int, float)) and change < 0 else "#31d6a0"
     company = info.get("shortName") or info.get("longName") or ticker
 
     st.markdown("---")
-    st.markdown(f"### {ticker} · {company}")
-    st.caption("Heatmap에서 선택한 종목의 핵심 정보입니다.")
+    header_left, header_right = st.columns([5, 1])
+    with header_left:
+        st.markdown(f"### {ticker} · {company}")
+    with header_right:
+        if st.button("닫기", key=f"close_heat_detail_{ticker}", use_container_width=True):
+            st.session_state.pop("heatmap_selected_ticker", None)
+            st.rerun()
 
-    cols = st.columns(6)
+    cols = st.columns(4)
     cols[0].metric("현재가", _money(q.get("price")), f"{change:+.2f}%" if isinstance(change, (int, float)) else None)
     cols[1].metric("시가총액", _number(info.get("marketCap")))
     cols[2].metric("Forward P/E", _number(info.get("forwardPE")))
-    cols[3].metric("52주 고가", _money(info.get("fiftyTwoWeekHigh")))
-    cols[4].metric("52주 저가", _money(info.get("fiftyTwoWeekLow")))
-    cols[5].metric("거래량", _number(q.get("volume")))
+    cols[3].metric("거래량", _number(q.get("volume")))
 
-    chart_data = history(ticker, "6mo", "1d")
-    if not chart_data.empty and "Close" in chart_data:
-        close = chart_data["Close"].dropna()
-        if not close.empty:
-            fig = go.Figure(go.Scatter(
-                x=close.index, y=close.values, mode="lines",
-                line={"width": 2, "color": tone},
-                hovertemplate=f"<b>{ticker}</b><br>%{{x|%b %d, %Y}}<br>$%{{y:,.2f}}<extra></extra>",
-            ))
-            fig.update_layout(
-                height=330, margin=dict(l=8, r=8, t=20, b=8),
-                paper_bgcolor="#0c1828", plot_bgcolor="#0c1828",
-                template="plotly_dark", xaxis_title=None, yaxis_title=None,
-                showlegend=False,
-            )
-            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+    range_col, candle_col = st.columns([2, 1])
+    with range_col:
+        range_label = st.radio(
+            "기간",
+            list(CHART_RANGES),
+            horizontal=True,
+            index=0,
+            key=f"heat_range_{ticker}",
+        )
+    candle_options = CANDLES_BY_RANGE[range_label]
+    with candle_col:
+        interval = st.selectbox(
+            "봉",
+            candle_options,
+            index=candle_options.index(DEFAULT_CANDLE[range_label]),
+            key=f"heat_candle_{ticker}_{range_label}",
+        )
+
+    period = CHART_RANGES[range_label]
+    is_intraday = interval.endswith("m") or interval.endswith("h")
+    chart_data = intraday_history(ticker, period, interval) if is_intraday else history(ticker, period, interval)
+
+    if not chart_data.empty:
+        st.plotly_chart(
+            advanced_chart(
+                chart_data,
+                ticker,
+                show_ma20=True,
+                show_ma50=not is_intraday,
+                show_ma100=False,
+                show_ma200=not is_intraday,
+                show_bollinger=False,
+                show_volume=True,
+                show_rsi=not is_intraday,
+                show_macd=False,
+                intraday=is_intraday,
+            ),
+            use_container_width=True,
+            config={"displayModeBar": True, "displaylogo": False},
+        )
+        if is_intraday:
+            st.caption(f"실제 {interval} OHLCV · 정규장 기준 · 30초 캐시")
+    else:
+        st.warning(f"{ticker}의 {range_label} / {interval} 데이터가 없습니다. 다른 봉을 선택하세요.")
 
     left, right = st.columns([1.25, 1])
     with left:
@@ -181,10 +238,7 @@ def _render_ticker_detail(ticker: str):
             current = load_json("watchlist.json", [])
             normalized = []
             for item in current:
-                if isinstance(item, dict):
-                    normalized.append(item)
-                else:
-                    normalized.append(str(item).upper())
+                normalized.append(item if isinstance(item, dict) else str(item).upper())
             existing = {str(item.get("ticker", "")).upper() if isinstance(item, dict) else str(item).upper() for item in normalized}
             if ticker.upper() not in existing:
                 normalized.append(ticker.upper())
@@ -196,9 +250,9 @@ def _render_ticker_detail(ticker: str):
 
 
 def render():
-    st.markdown('<div class="page-kicker">LIVE MARKET MAP · VERSION 3.00</div>', unsafe_allow_html=True)
+    st.markdown('<div class="page-kicker">LIVE MARKET MAP · VERSION 3.18.5</div>', unsafe_allow_html=True)
     st.title("Market Heatmap")
-    st.caption("시가총액(자산규모) 비중, 등락률, 시장 폭과 섹터 순환을 한 화면에서 확인합니다.")
+    st.caption("시가총액, 등락률, 시장 폭과 섹터 순환을 한 화면에서 확인합니다. 데이터는 Yahoo Finance 기준입니다.")
 
     sector_df = sector_snapshot()
     valid_sector = sector_df.dropna(subset=["Change %"]).sort_values("Change %", ascending=False)
@@ -254,15 +308,7 @@ def render():
         with stats[5]: _stat_card("LAGGARD", worst, "Weakest", "red")
 
         heatmap_fig = stock_heatmap(df, title)
-        
-        # 줌(Zoom in) 방지 옵션 적용
-        heatmap_fig.update_traces(
-            maxdepth=2,
-            root_color="rgba(0,0,0,0)"
-        )
-
         selected_ticker = st.session_state.get("heatmap_selected_ticker")
-        
         if plotly_events is not None:
             clicks = plotly_events(
                 heatmap_fig,
@@ -289,10 +335,12 @@ def render():
                 "종목 상세 보기",
                 ["선택하세요"] + df["Ticker"].astype(str).tolist(),
                 key=f"heatmap_detail_select_{mode}_{title}",
+                label_visibility="collapsed",
             )
-            if selected_ticker == "선택하세요":
-                selected_ticker = None
+            if fallback != "선택하세요":
+                st.session_state["heatmap_selected_ticker"] = fallback.upper()
 
+        selected_ticker = st.session_state.get("heatmap_selected_ticker")
         if selected_ticker and selected_ticker in set(df["Ticker"].astype(str).str.upper()):
             _render_ticker_detail(selected_ticker)
 
@@ -320,7 +368,7 @@ def render():
         st.plotly_chart(
             stock_heatmap(sector_map_df, "US Sector Rotation"),
             use_container_width=True,
-            config={"displaylogo": False},
+            config={"staticPlot": True, "displayModeBar": False, "displaylogo": False},
         )
         st.plotly_chart(
             market_breadth_bar(sector_map_df),
