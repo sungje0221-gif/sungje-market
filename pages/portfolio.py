@@ -1,3 +1,8 @@
+import os
+import uuid
+from datetime import date
+from pathlib import Path
+
 import pandas as pd
 import streamlit as st
 import yfinance as yf
@@ -32,6 +37,310 @@ STRATEGIES = [
     "Materials / Mining", "Gold", "Silver", "Real Estate",
     "Speculative", "Other",
 ]
+
+TRANSACTION_COLS = [
+    "ID", "Date", "Account", "Action", "Ticker", "Shares",
+    "Price", "Cost Basis", "Fee", "Notes",
+]
+TRANSACTIONS_PATH = Path("data") / "transactions.csv"
+
+
+def _empty_transactions() -> pd.DataFrame:
+    return pd.DataFrame(columns=TRANSACTION_COLS)
+
+
+def _load_transactions() -> pd.DataFrame:
+    """Load the local transaction ledger. The CSV is created on first save."""
+    try:
+        if not TRANSACTIONS_PATH.exists():
+            return _empty_transactions()
+        df = pd.read_csv(TRANSACTIONS_PATH, dtype={"ID": str, "Account": str, "Action": str, "Ticker": str, "Notes": str})
+    except Exception as exc:
+        st.session_state["transactions_load_error"] = str(exc)
+        return _empty_transactions()
+
+    for col in TRANSACTION_COLS:
+        if col not in df.columns:
+            df[col] = "" if col in {"ID", "Date", "Account", "Action", "Ticker", "Notes"} else 0.0
+    for col in ["Shares", "Price", "Cost Basis", "Fee"]:
+        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
+    df["Date"] = pd.to_datetime(df["Date"], errors="coerce").dt.date.astype(str)
+    df["Action"] = df["Action"].astype(str).str.upper().str.strip()
+    df["Ticker"] = df["Ticker"].astype(str).str.upper().str.strip()
+    df["Account"] = df["Account"].astype(str).str.strip()
+    df["ID"] = df["ID"].astype(str)
+    return df[TRANSACTION_COLS].copy()
+
+
+def _save_transactions(df: pd.DataFrame) -> None:
+    TRANSACTIONS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    clean = df.copy()
+    for col in TRANSACTION_COLS:
+        if col not in clean.columns:
+            clean[col] = "" if col in {"ID", "Date", "Account", "Action", "Ticker", "Notes"} else 0.0
+    clean = clean[TRANSACTION_COLS]
+    clean.to_csv(TRANSACTIONS_PATH, index=False)
+
+
+def _transaction_calculations(df: pd.DataFrame) -> pd.DataFrame:
+    """Calculate cash flow and FIFO realized P/L by account and ticker.
+
+    SELL rows consume earlier BUY lots in FIFO order. When a SELL predates the
+    transaction ledger or exceeds recorded BUY lots, the row's Cost Basis value
+    is used only for the unmatched shares as an opening-position fallback.
+    """
+    calc = df.copy()
+    extra_cols = [
+        "Gross Amount", "Net Cash Flow", "FIFO Cost Basis", "Matched Shares",
+        "Unmatched Shares", "Realized P/L", "Return %", "Open Shares",
+        "Open Cost Basis",
+    ]
+    if calc.empty:
+        for col in extra_cols:
+            calc[col] = pd.Series(dtype=float)
+        return calc
+
+    calc = calc.reset_index(drop=True)
+    calc["_row_order"] = range(len(calc))
+    calc["_date_sort"] = pd.to_datetime(calc["Date"], errors="coerce")
+    for col in ["Shares", "Price", "Cost Basis", "Fee"]:
+        calc[col] = pd.to_numeric(calc[col], errors="coerce").fillna(0.0)
+
+    calc["Gross Amount"] = calc["Shares"] * calc["Price"]
+    calc["Net Cash Flow"] = 0.0
+    calc["FIFO Cost Basis"] = 0.0
+    calc["Matched Shares"] = 0.0
+    calc["Unmatched Shares"] = 0.0
+    calc["Realized P/L"] = 0.0
+    calc["Return %"] = 0.0
+    calc["Open Shares"] = 0.0
+    calc["Open Cost Basis"] = 0.0
+
+    lots: dict[tuple[str, str], list[dict[str, float]]] = {}
+    ordered = calc.sort_values(["_date_sort", "_row_order"], kind="stable")
+
+    for idx, row in ordered.iterrows():
+        action = str(row["Action"]).upper().strip()
+        key = (str(row["Account"]).strip(), str(row["Ticker"]).upper().strip())
+        shares = max(float(row["Shares"]), 0.0)
+        price = max(float(row["Price"]), 0.0)
+        fee = max(float(row["Fee"]), 0.0)
+        gross = shares * price
+        book = lots.setdefault(key, [])
+
+        if action == "BUY":
+            unit_cost = ((gross + fee) / shares) if shares > 0 else 0.0
+            book.append({"shares": shares, "unit_cost": unit_cost})
+            calc.at[idx, "Net Cash Flow"] = -(gross + fee)
+        elif action == "SELL":
+            remaining = shares
+            matched = 0.0
+            fifo_basis_total = 0.0
+
+            while remaining > 1e-9 and book:
+                lot = book[0]
+                used = min(remaining, lot["shares"])
+                fifo_basis_total += used * lot["unit_cost"]
+                matched += used
+                lot["shares"] -= used
+                remaining -= used
+                if lot["shares"] <= 1e-9:
+                    book.pop(0)
+
+            fallback_basis = max(float(row["Cost Basis"]), 0.0)
+            if remaining > 1e-9 and fallback_basis > 0:
+                fifo_basis_total += remaining * fallback_basis
+
+            proceeds = gross - fee
+            realized = proceeds - fifo_basis_total
+            basis_shares = matched + (remaining if fallback_basis > 0 else 0.0)
+            effective_basis = fifo_basis_total / basis_shares if basis_shares > 0 else 0.0
+
+            calc.at[idx, "Net Cash Flow"] = proceeds
+            calc.at[idx, "FIFO Cost Basis"] = effective_basis
+            calc.at[idx, "Matched Shares"] = matched
+            calc.at[idx, "Unmatched Shares"] = remaining
+            calc.at[idx, "Realized P/L"] = realized
+            calc.at[idx, "Return %"] = (realized / fifo_basis_total * 100) if fifo_basis_total > 0 else 0.0
+
+        open_shares = sum(lot["shares"] for lot in book)
+        open_basis_total = sum(lot["shares"] * lot["unit_cost"] for lot in book)
+        calc.at[idx, "Open Shares"] = open_shares
+        calc.at[idx, "Open Cost Basis"] = open_basis_total / open_shares if open_shares > 0 else 0.0
+
+    return calc.drop(columns=["_row_order", "_date_sort"])
+
+def _realized_pl_total() -> float:
+    tx = _transaction_calculations(_load_transactions())
+    return float(tx["Realized P/L"].sum()) if not tx.empty else 0.0
+
+
+def _default_cost_basis(account: str, ticker: str) -> float:
+    holdings = load_portfolio()
+    if holdings.empty:
+        return 0.0
+    match = holdings[
+        holdings["Account"].astype(str).eq(str(account))
+        & holdings["Ticker"].astype(str).str.upper().eq(str(ticker).upper())
+    ]
+    if match.empty:
+        return 0.0
+    return float(pd.to_numeric(match.iloc[0]["Avg Cost"], errors="coerce") or 0.0)
+
+
+def _apply_transaction_to_holdings(account: str, action: str, ticker: str, shares: float, price: float) -> tuple[bool, str]:
+    """Apply a transaction to Manual Portfolio without touching Schwab live data."""
+    df = load_portfolio().copy()
+    ticker = ticker.upper().strip()
+    account = account.strip()
+    mask = df["Account"].astype(str).eq(account) & df["Ticker"].astype(str).str.upper().eq(ticker) if not df.empty else pd.Series(dtype=bool)
+
+    if action == "BUY":
+        if not df.empty and mask.any():
+            idx = df.index[mask][0]
+            old_shares = float(df.at[idx, "Shares"])
+            old_avg = float(df.at[idx, "Avg Cost"])
+            new_shares = old_shares + shares
+            new_avg = ((old_shares * old_avg) + (shares * price)) / new_shares if new_shares else 0.0
+            df.at[idx, "Shares"] = new_shares
+            df.at[idx, "Avg Cost"] = new_avg
+        else:
+            prof = _security_profile(ticker)
+            new = pd.DataFrame([[
+                account, ticker, shares, price, _suggest_strategy(ticker, prof),
+                prof.get("Sector", "Unknown"), prof.get("Industry", "Unknown"),
+            ]], columns=COLS)
+            df = pd.concat([df, new], ignore_index=True)
+        save_portfolio(df)
+        return True, "Manual Portfolio의 수량과 평균단가를 업데이트했습니다."
+
+    if df.empty or not mask.any():
+        return False, "Manual Portfolio에서 해당 계좌/종목을 찾지 못했습니다."
+    idx = df.index[mask][0]
+    old_shares = float(df.at[idx, "Shares"])
+    if shares > old_shares + 1e-9:
+        return False, f"보유 수량 {old_shares:g}주보다 많이 매도할 수 없습니다."
+    remaining = old_shares - shares
+    if remaining <= 1e-9:
+        df = df.drop(index=idx).reset_index(drop=True)
+    else:
+        df.at[idx, "Shares"] = remaining
+    save_portfolio(df)
+    return True, "Manual Portfolio의 보유 수량을 업데이트했습니다."
+
+
+def transactions_page():
+    st.caption("매수·매도 거래를 기록하고 FIFO 방식으로 실현손익을 계산합니다. 거래내역은 data/transactions.csv에 저장됩니다.")
+    load_error = st.session_state.pop("transactions_load_error", None)
+    if load_error:
+        st.error(f"거래내역을 읽지 못했습니다: {load_error}")
+
+    tx = _load_transactions()
+    holdings = load_portfolio()
+    account_options = sorted(set(holdings["Account"].astype(str))) if not holdings.empty else ["Taxable"]
+    if not account_options:
+        account_options = ["Taxable"]
+
+    with st.expander("Add transaction", expanded=True):
+        c1, c2, c3, c4 = st.columns(4)
+        tx_date = c1.date_input("Date", value=date.today(), key="tx_date")
+        account = c2.selectbox("Account", account_options + ["Other..."], key="tx_account")
+        custom_account = c2.text_input("Other account", "", key="tx_custom_account") if account == "Other..." else ""
+        action = c3.selectbox("Action", ["BUY", "SELL"], key="tx_action")
+        ticker = c4.text_input("Ticker", key="tx_ticker").upper().strip()
+
+        c5, c6, c7, c8 = st.columns(4)
+        shares = c5.number_input("Shares", min_value=0.0, step=1.0, format="%.4f", key="tx_shares")
+        price = c6.number_input("Transaction price", min_value=0.0, step=0.01, format="%.4f", key="tx_price")
+        resolved_account = custom_account.strip() if account == "Other..." else account
+        suggested_basis = _default_cost_basis(resolved_account, ticker) if action == "SELL" and ticker else price
+        basis = c7.number_input(
+            "Opening cost basis / share", min_value=0.0, value=float(suggested_basis), step=0.01, format="%.4f",
+            help="FIFO 매수기록이 부족한 매도분에만 사용되는 보조 원가입니다. 기존 보유분을 처음 기록할 때 유용합니다.",
+            key=f"tx_basis_{action}_{ticker}_{resolved_account}",
+        )
+        fee = c8.number_input("Fee", min_value=0.0, step=0.01, format="%.2f", key="tx_fee")
+        notes = st.text_input("Notes", key="tx_notes")
+        update_holdings = st.checkbox("Also update Manual Portfolio holdings", value=True, key="tx_update_holdings")
+
+        if st.button("Save transaction", type="primary", use_container_width=True):
+            if not resolved_account:
+                st.error("Account를 입력하세요.")
+            elif not ticker:
+                st.error("Ticker를 입력하세요.")
+            elif shares <= 0 or price <= 0:
+                st.error("Shares와 Transaction price는 0보다 커야 합니다.")
+            elif action == "SELL" and basis <= 0:
+                st.error("SELL 거래에는 Cost basis / share가 필요합니다.")
+            else:
+                if update_holdings:
+                    ok, message = _apply_transaction_to_holdings(resolved_account, action, ticker, shares, price)
+                    if not ok:
+                        st.error(message)
+                        st.stop()
+                row = pd.DataFrame([[
+                    uuid.uuid4().hex, tx_date.isoformat(), resolved_account, action, ticker,
+                    shares, price, price if action == "BUY" else basis, fee, notes.strip(),
+                ]], columns=TRANSACTION_COLS)
+                _save_transactions(pd.concat([tx, row], ignore_index=True))
+                st.success("거래를 저장했습니다." + (f" {message}" if update_holdings else ""))
+                st.rerun()
+
+    calc = _transaction_calculations(tx)
+    sells = calc[calc["Action"].eq("SELL")].copy() if not calc.empty else calc.copy()
+    total_buys = float(calc.loc[calc["Action"].eq("BUY"), "Gross Amount"].sum()) if not calc.empty else 0.0
+    total_sales = float(calc.loc[calc["Action"].eq("SELL"), "Gross Amount"].sum()) if not calc.empty else 0.0
+    realized = float(sells["Realized P/L"].sum()) if not sells.empty else 0.0
+    winners = int((sells["Realized P/L"] > 0).sum()) if not sells.empty else 0
+    win_rate = winners / len(sells) * 100 if len(sells) else 0.0
+
+    m = st.columns(5)
+    m[0].metric("Buy Amount", money(total_buys))
+    m[1].metric("Sell Amount", money(total_sales))
+    m[2].metric("Realized P/L", money(realized))
+    m[3].metric("Sell Trades", len(sells))
+    m[4].metric("Win Rate", f"{win_rate:.1f}%")
+
+    if tx.empty:
+        st.info("아직 저장된 거래가 없습니다.")
+        return
+
+    st.markdown("### Transaction History")
+    display_cols = ["Date", "Account", "Action", "Ticker", "Shares", "Price", "FIFO Cost Basis", "Fee", "Gross Amount", "Realized P/L", "Return %", "Unmatched Shares", "Notes"]
+    history = calc.sort_values(["Date", "ID"], ascending=[False, False])[display_cols].copy()
+    st.dataframe(
+        style_signed_columns(history, ["Realized P/L", "Return %"]),
+        use_container_width=True, hide_index=True,
+        column_config={
+            "Shares": st.column_config.NumberColumn(format="%.4f"),
+            "Price": st.column_config.NumberColumn(format="$%.2f"),
+            "FIFO Cost Basis": st.column_config.NumberColumn(format="$%.2f"),
+            "Fee": st.column_config.NumberColumn(format="$%.2f"),
+            "Gross Amount": st.column_config.NumberColumn(format="$%.2f"),
+            "Realized P/L": st.column_config.NumberColumn(format="$%.2f"),
+            "Return %": st.column_config.NumberColumn(format="%+.2f%%"),
+        },
+    )
+
+    if not sells.empty:
+        st.markdown("### Realized P/L by Ticker")
+        by_ticker = sells.groupby("Ticker", as_index=False).agg(
+            **{"Sell Trades": ("Ticker", "size"), "Shares Sold": ("Shares", "sum"), "Realized P/L": ("Realized P/L", "sum")}
+        ).sort_values("Realized P/L", ascending=False)
+        st.dataframe(style_signed_columns(by_ticker, ["Realized P/L"]), use_container_width=True, hide_index=True)
+
+    with st.expander("Delete transactions"):
+        labels = {
+            f"{r.Date} · {r.Account} · {r.Action} · {r.Ticker} · {r.Shares:g} @ ${r.Price:,.2f} · {str(r.ID)[:8]}": r.ID
+            for r in tx.itertuples(index=False)
+        }
+        selected = st.multiselect("Select transactions to delete", list(labels.keys()))
+        st.warning("거래 삭제는 Transaction History에서만 제거합니다. 이미 반영된 Manual Portfolio 보유수량은 자동으로 되돌리지 않습니다.")
+        if st.button("Delete selected transactions", disabled=not selected):
+            delete_ids = {labels[label] for label in selected}
+            _save_transactions(tx[~tx["ID"].isin(delete_ids)].reset_index(drop=True))
+            st.rerun()
+
 
 SECTORS = [
     "Auto detect", "Communication Services", "Consumer Discretionary",
@@ -201,13 +510,14 @@ def _suggest_strategy(ticker: str, profile: dict) -> str:
     return "Other"
 
 
-def _portfolio_dashboard(e: pd.DataFrame, settings: dict):
+def _portfolio_dashboard(e: pd.DataFrame, settings: dict, realized_pl: float = 0.0):
     invested = float(e["Market Value"].sum())
     cash = float(settings.get("cash", 0))
     buying_power = float(settings.get("buying_power", 0))
     total_value = invested + cash
     total_cost = float(e["Cost Basis"].sum())
-    total_pl = float(e["P/L"].sum())
+    unrealized_pl = float(e["P/L"].sum())
+    total_pl = unrealized_pl + realized_pl
     total_pl_pct = (total_pl / total_cost * 100) if total_cost else 0.0
     day_pl = float((e["Shares"] * e.get("Day Change $", 0)).sum()) if "Day Change $" in e else 0.0
     cash_pct = cash / total_value * 100 if total_value else 0
@@ -217,14 +527,16 @@ def _portfolio_dashboard(e: pd.DataFrame, settings: dict):
     sectors = int(e["Sector"].replace("Unknown", pd.NA).dropna().nunique()) if "Sector" in e else 0
     risk = "HIGH" if top_weight >= 25 or top3 >= 60 else "MEDIUM" if top_weight >= 15 or top3 >= 45 else "LOW"
 
-    c=st.columns(7)
+    c=st.columns(8)
     c[0].metric("Total Value", money(total_value))
     c[1].metric("Invested", money(invested))
     c[2].metric("Cash", money(cash), f"{cash_pct:.1f}%")
     c[3].metric("Buying Power", money(buying_power))
-    c[4].metric("Total P/L", money(total_pl), f"{total_pl_pct:+.2f}%")
-    c[5].metric("Today's P/L", money(day_pl))
-    c[6].metric("Risk", risk)
+    c[4].metric("Unrealized P/L", money(unrealized_pl))
+    c[5].metric("Realized P/L", money(realized_pl))
+    c[6].metric("Total P/L", money(total_pl), f"{total_pl_pct:+.2f}%")
+    c[7].metric("Risk", risk)
+    st.caption(f"Today's P/L: {money(day_pl)}")
 
     st.markdown("### Today's Changes")
     movers=e.sort_values("Day %", ascending=True).copy() if "Day %" in e else e.copy()
@@ -333,7 +645,7 @@ def manual_portfolio():
         save_portfolio(updated); st.rerun()
 
     e = enrich(df)
-    _portfolio_dashboard(e, settings)
+    _portfolio_dashboard(e, settings, _realized_pl_total())
     st.markdown("### Holdings")
     display=e[[c for c in ["Account","Ticker","Shares","Avg Cost","Category","Sector","Industry","Current Price","Day %","Market Value","Cost Basis","P/L","P/L %","Weight %"] if c in e.columns]].copy()
     edited=st.data_editor(
@@ -543,10 +855,12 @@ def csv_import():
 
 def render():
     st.title("Portfolio")
-    tab1, tab2, tab3 = st.tabs(["Charles Schwab Live", "Manual Portfolio", "CSV Import"])
+    tab1, tab2, tab3, tab4 = st.tabs(["Charles Schwab Live", "Manual Portfolio", "Transactions", "CSV Import"])
     with tab1:
         schwab_portfolio()
     with tab2:
         manual_portfolio()
     with tab3:
+        transactions_page()
+    with tab4:
         csv_import()
