@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import pandas as pd
 import requests
@@ -218,60 +219,34 @@ def _schwab_quote(ticker: str) -> dict[str, Any] | None:
         return None
 
 
-@st.cache_data(ttl=30, show_spinner=False)
+@st.cache_data(ttl=20, show_spinner=False)
 def quote(ticker: str) -> dict[str, Any]:
+    """Return a live single-symbol quote using the provider previous close."""
     schwab = _schwab_quote(ticker)
     if schwab and schwab.get("price") is not None:
         return schwab
 
-    data = history(ticker, "5d", "1d")
-    if data.empty or "Close" not in data:
+    try:
+        fast = yf.Ticker(ticker).fast_info
+        price = _number(fast.get("last_price"))
+        previous = _number(fast.get("previous_close"))
+        if price is None:
+            return _empty_quote("Yahoo unavailable")
         return {
-            "price": None,
-            "change_pct": None,
-            "volume": None,
-            "bid": None,
-            "ask": None,
-            "last": None,
-            "mark": None,
-            "source": "Unavailable",
+            "price": price,
+            "previous_close": previous,
+            "change_pct": (price / previous - 1) * 100 if previous else None,
+            "change_abs": price - previous if previous is not None else None,
+            "day_low": _number(fast.get("day_low")),
+            "day_high": _number(fast.get("day_high")),
+            "volume": _number(fast.get("last_volume") or fast.get("three_month_average_volume")),
+            "bid": None, "ask": None, "last": price, "mark": price,
+            "market_cap": _number(fast.get("market_cap")),
+            "source": "Yahoo live",
+            "as_of": None,
         }
-
-    close = data["Close"].dropna()
-    if close.empty:
-        return {
-            "price": None,
-            "change_pct": None,
-            "volume": None,
-            "bid": None,
-            "ask": None,
-            "last": None,
-            "mark": None,
-            "source": "Unavailable",
-        }
-
-    price = float(close.iloc[-1])
-    previous = float(close.iloc[-2]) if len(close) > 1 else price
-    volume = (
-        float(data["Volume"].dropna().iloc[-1])
-        if "Volume" in data and not data["Volume"].dropna().empty
-        else None
-    )
-    day_low = float(data["Low"].dropna().iloc[-1]) if "Low" in data and not data["Low"].dropna().empty else None
-    day_high = float(data["High"].dropna().iloc[-1]) if "High" in data and not data["High"].dropna().empty else None
-    return {
-        "price": price,
-        "change_pct": ((price / previous) - 1) * 100 if previous else 0,
-        "change_abs": price - previous,
-        "day_low": day_low,
-        "day_high": day_high,
-        "volume": volume,
-        "bid": None,
-        "ask": None,
-        "last": price,
-        "mark": price,
-        "source": "Yahoo Finance",
-    }
+    except Exception:
+        return _empty_quote("Yahoo unavailable")
 
 
 @st.cache_data(ttl=900, show_spinner=False)
@@ -281,63 +256,119 @@ def info(ticker: str):
     except Exception:
         return {}
 
-@st.cache_data(ttl=60, show_spinner=False)
+@st.cache_data(ttl=20, show_spinner=False)
 def batch_quotes(tickers: tuple[str, ...]) -> dict[str, dict[str, Any]]:
-    """Fetch many Yahoo quotes in one request.
+    """Return live quotes using authoritative previous-close fields.
 
-    Used by dashboard/heatmap views to avoid one network round-trip per symbol.
-    Individual detail pages can still call ``quote`` so Schwab remains available.
+    Schwab is preferred when connected. Remaining symbols fall back to
+    ``yfinance.Ticker.fast_info``. Unlike the old implementation, this function
+    never derives today's percentage from adjacent daily-history rows, because
+    Yahoo daily downloads can omit or unevenly refresh the latest session.
     """
     symbols = tuple(dict.fromkeys(str(t).strip().upper() for t in tickers if str(t).strip()))
     if not symbols:
         return {}
 
-    empty = {
-        "price": None, "change_pct": None, "change_abs": None, "day_low": None, "day_high": None, "volume": None,
-        "bid": None, "ask": None, "last": None, "mark": None,
-        "source": "Unavailable",
-    }
-    results = {ticker: dict(empty) for ticker in symbols}
-    try:
-        data = yf.download(
-            list(symbols), period="5d", interval="1d", auto_adjust=False,
-            progress=False, threads=True, group_by="column",
-        )
-        if data is None or data.empty:
-            return results
+    results = {ticker: _empty_quote() for ticker in symbols}
 
-        for ticker in symbols:
-            try:
-                if isinstance(data.columns, pd.MultiIndex):
-                    close = data["Close"][ticker].dropna()
-                    low_series = data["Low"][ticker].dropna() if "Low" in data.columns.get_level_values(0) else pd.Series(dtype=float)
-                    high_series = data["High"][ticker].dropna() if "High" in data.columns.get_level_values(0) else pd.Series(dtype=float)
-                    volume_series = data["Volume"][ticker].dropna() if "Volume" in data.columns.get_level_values(0) else pd.Series(dtype=float)
-                else:
-                    close = data["Close"].dropna()
-                    low_series = data["Low"].dropna() if "Low" in data else pd.Series(dtype=float)
-                    high_series = data["High"].dropna() if "High" in data else pd.Series(dtype=float)
-                    volume_series = data["Volume"].dropna() if "Volume" in data else pd.Series(dtype=float)
-                if close.empty:
-                    continue
-                price = float(close.iloc[-1])
-                previous = float(close.iloc[-2]) if len(close) > 1 else price
-                volume = float(volume_series.iloc[-1]) if not volume_series.empty else None
-                results[ticker] = {
-                    "price": price,
-                    "change_pct": ((price / previous) - 1) * 100 if previous else 0.0,
-                    "change_abs": price - previous,
-                    "day_low": float(low_series.iloc[-1]) if not low_series.empty else None,
-                    "day_high": float(high_series.iloc[-1]) if not high_series.empty else None,
-                    "volume": volume,
-                    "bid": None, "ask": None, "last": price, "mark": price,
-                    "source": "Yahoo Finance batch",
-                }
-            except (KeyError, TypeError, ValueError, IndexError):
-                continue
-    except Exception:
-        return results
+    # One Schwab request for the whole heatmap universe.
+    if connection_status().get("connected"):
+        try:
+            response = requests.get(
+                f"{SCHWAB_MARKETDATA_BASE_URL}/quotes",
+                params={"symbols": ",".join(symbols), "fields": "quote,reference"},
+                headers={
+                    "Authorization": f"Bearer {access_token()}",
+                    "Accept": "application/json",
+                },
+                timeout=20,
+            )
+            if response.ok:
+                payload = response.json()
+                for ticker in symbols:
+                    item = payload.get(ticker) or payload.get(ticker.upper())
+                    if not isinstance(item, dict):
+                        continue
+                    quote_data = item.get("quote", {}) or {}
+                    reference = item.get("reference", {}) or {}
+                    price = _number(quote_data.get("lastPrice") or quote_data.get("mark"))
+                    previous_close = _number(reference.get("previousClose") or quote_data.get("closePrice"))
+                    change_pct = _number(quote_data.get("netPercentChange"))
+                    if change_pct is None and price is not None and previous_close:
+                        change_pct = (price / previous_close - 1) * 100
+                    if price is None:
+                        continue
+                    results[ticker] = {
+                        "price": price,
+                        "previous_close": previous_close,
+                        "change_pct": change_pct,
+                        "change_abs": _number(quote_data.get("netChange"))
+                            if quote_data.get("netChange") is not None
+                            else (price - previous_close if previous_close is not None else None),
+                        "day_low": _number(quote_data.get("lowPrice")),
+                        "day_high": _number(quote_data.get("highPrice")),
+                        "volume": _number(quote_data.get("totalVolume")),
+                        "bid": _number(quote_data.get("bidPrice")),
+                        "ask": _number(quote_data.get("askPrice")),
+                        "last": _number(quote_data.get("lastPrice")),
+                        "mark": _number(quote_data.get("mark")),
+                        "market_cap": None,
+                        "source": "Schwab live",
+                        "as_of": quote_data.get("quoteTime") or quote_data.get("tradeTime"),
+                    }
+        except (requests.RequestException, SchwabError, ValueError, TypeError):
+            pass
+
+    missing = [ticker for ticker in symbols if results[ticker].get("price") is None]
+
+    def yahoo_fast_quote(ticker: str) -> tuple[str, dict[str, Any]]:
+        try:
+            fast = yf.Ticker(ticker).fast_info
+            price = _number(fast.get("last_price"))
+            previous_close = _number(fast.get("previous_close"))
+            if price is None:
+                return ticker, _empty_quote("Yahoo unavailable")
+            change_pct = (price / previous_close - 1) * 100 if previous_close else None
+            return ticker, {
+                "price": price,
+                "previous_close": previous_close,
+                "change_pct": change_pct,
+                "change_abs": price - previous_close if previous_close is not None else None,
+                "day_low": _number(fast.get("day_low")),
+                "day_high": _number(fast.get("day_high")),
+                "volume": _number(fast.get("last_volume") or fast.get("three_month_average_volume")),
+                "bid": None, "ask": None, "last": price, "mark": price,
+                "market_cap": _number(fast.get("market_cap")),
+                "source": "Yahoo live",
+                "as_of": None,
+            }
+        except Exception:
+            return ticker, _empty_quote("Yahoo unavailable")
+
+    if missing:
+        with ThreadPoolExecutor(max_workers=min(8, len(missing))) as executor:
+            futures = [executor.submit(yahoo_fast_quote, ticker) for ticker in missing]
+            for future in as_completed(futures):
+                ticker, result = future.result()
+                results[ticker] = result
+
+    # Schwab does not supply market cap in the quote payload. Fill it only for
+    # sizing; failure simply falls back to equal-size tiles.
+    schwab_symbols = [ticker for ticker in symbols if results[ticker].get("price") is not None and results[ticker].get("market_cap") is None]
+    def market_cap_only(ticker: str) -> tuple[str, float | None]:
+        try:
+            return ticker, _number(yf.Ticker(ticker).fast_info.get("market_cap"))
+        except Exception:
+            return ticker, None
+    if schwab_symbols:
+        with ThreadPoolExecutor(max_workers=min(8, len(schwab_symbols))) as executor:
+            futures = [executor.submit(market_cap_only, ticker) for ticker in schwab_symbols]
+            for future in as_completed(futures):
+                ticker, market_cap = future.result()
+                results[ticker]["market_cap"] = market_cap
+
     return results
+
 
 @st.cache_data(ttl=300, show_spinner=False)
 def batch_history(tickers: tuple[str, ...], period: str = "1y", interval: str = "1d") -> dict[str, pd.DataFrame]:

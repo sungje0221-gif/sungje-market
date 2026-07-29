@@ -1,0 +1,14 @@
+Investment OS v3.18.1 Clean Heatmap
+
+1. Extract the ZIP.
+2. Copy the contents of sungje-market over the existing project.
+3. Commit and push with GitHub Desktop.
+4. Reboot the Streamlit app once after deployment.
+
+Changes
+- Heatmap price/change uses Schwab live quotes first, Yahoo fast_info fallback.
+- Daily change is calculated from the authoritative previous-close field.
+- Heatmap data cache reduced to 20 seconds end-to-end.
+- Treemap click-to-zoom disabled; compact selector opens details instead.
+- Market-cap tile sizing when available.
+- __pycache__, .pyc, .pyo, and local secret files excluded from this package.

@@ -4,11 +4,6 @@ import pandas as pd
 import streamlit as st
 import plotly.graph_objects as go
 
-try:
-    from streamlit_plotly_events import plotly_events
-except ImportError:
-    plotly_events = None
-
 from components.charts import market_breadth_bar, performance_matrix, stock_heatmap
 from engine.fundamentals import ticker_info
 from engine.market_data import batch_quotes, history, quote
@@ -42,7 +37,7 @@ SECTOR_ETFS = {
 }
 
 
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=20, show_spinner=False)
 def build_rows(tickers: tuple[str, ...], sector_name: str | None = None) -> pd.DataFrame:
     # Heatmap loading must stay fast: use a single batch quote request and equal
     # tile sizes. Fundamentals are fetched only after the user selects a symbol.
@@ -54,13 +49,14 @@ def build_rows(tickers: tuple[str, ...], sector_name: str | None = None) -> pd.D
             "Ticker": ticker,
             "Price": q.get("price"),
             "Change %": q.get("change_pct"),
-            "Weight": 1.0,
+            "Weight": q.get("market_cap") or 1.0,
+            "Source": q.get("source") or "Unavailable",
             "Sector": sector_name or "Market",
         })
     return pd.DataFrame(rows)
 
 
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=20, show_spinner=False)
 def sector_snapshot() -> pd.DataFrame:
     tickers = tuple(SECTOR_ETFS.values())
     quote_map = batch_quotes(tickers)
@@ -132,16 +128,20 @@ def _render_ticker_detail(ticker: str):
     company = info.get("shortName") or info.get("longName") or ticker
 
     st.markdown("---")
-    st.markdown(f"### {ticker} · {company}")
-    st.caption("Heatmap에서 선택한 종목의 핵심 정보입니다.")
+    header_left, header_right = st.columns([5, 1])
+    with header_left:
+        st.markdown(f"### {ticker} · {company}")
+    with header_right:
+        if st.button("닫기", key=f"close_heat_detail_{ticker}", use_container_width=True):
+            st.session_state.pop("heatmap_selected_ticker", None)
+            st.rerun()
+    st.caption("선택한 종목의 간단 정보입니다.")
 
-    cols = st.columns(6)
+    cols = st.columns(4)
     cols[0].metric("현재가", _money(q.get("price")), f"{change:+.2f}%" if isinstance(change, (int, float)) else None)
     cols[1].metric("시가총액", _number(info.get("marketCap")))
     cols[2].metric("Forward P/E", _number(info.get("forwardPE")))
-    cols[3].metric("52주 고가", _money(info.get("fiftyTwoWeekHigh")))
-    cols[4].metric("52주 저가", _money(info.get("fiftyTwoWeekLow")))
-    cols[5].metric("거래량", _number(q.get("volume")))
+    cols[3].metric("거래량", _number(q.get("volume")))
 
     chart_data = history(ticker, "6mo", "1d")
     if not chart_data.empty and "Close" in chart_data:
@@ -153,7 +153,7 @@ def _render_ticker_detail(ticker: str):
                 hovertemplate=f"<b>{ticker}</b><br>%{{x|%b %d, %Y}}<br>$%{{y:,.2f}}<extra></extra>",
             ))
             fig.update_layout(
-                height=330, margin=dict(l=8, r=8, t=20, b=8),
+                height=220, margin=dict(l=8, r=8, t=12, b=8),
                 paper_bgcolor="#0c1828", plot_bgcolor="#0c1828",
                 template="plotly_dark", xaxis_title=None, yaxis_title=None,
                 showlegend=False,
@@ -195,9 +195,9 @@ def _render_ticker_detail(ticker: str):
 
 
 def render():
-    st.markdown('<div class="page-kicker">LIVE MARKET MAP · VERSION 3.00</div>', unsafe_allow_html=True)
+    st.markdown('<div class="page-kicker">LIVE MARKET MAP · VERSION 3.18.1</div>', unsafe_allow_html=True)
     st.title("Market Heatmap")
-    st.caption("시가총액, 등락률, 시장 폭과 섹터 순환을 한 화면에서 확인합니다. 데이터는 Yahoo Finance 기준입니다.")
+    st.caption("현재가와 전일 종가 기준 등락률을 사용합니다. Schwab 연결 시 Schwab 실시간 시세를 우선하고, 나머지는 Yahoo live quote를 사용합니다.")
 
     sector_df = sector_snapshot()
     valid_sector = sector_df.dropna(subset=["Change %"]).sort_values("Change %", ascending=False)
@@ -253,36 +253,25 @@ def render():
         with stats[5]: _stat_card("LAGGARD", worst, "Weakest", "red")
 
         heatmap_fig = stock_heatmap(df, title)
-        selected_ticker = st.session_state.get("heatmap_selected_ticker")
-        if plotly_events is not None:
-            clicks = plotly_events(
-                heatmap_fig,
-                click_event=True,
-                hover_event=False,
-                select_event=False,
-                override_height=560,
-                key=f"heatmap_click_{mode}_{title}",
-            )
-            if clicks:
-                point = clicks[0]
-                label = point.get("label") or point.get("text")
-                if not label and point.get("pointNumber") is not None:
-                    try:
-                        label = str(df.iloc[int(point["pointNumber"])]["Ticker"])
-                    except Exception:
-                        label = None
-                if label:
-                    st.session_state["heatmap_selected_ticker"] = str(label).upper()
-                    selected_ticker = str(label).upper()
-        else:
-            st.plotly_chart(heatmap_fig, use_container_width=True, config={"displaylogo": False, "scrollZoom": False})
+        # Plotly treemap leaf-clicks zoom into one tile and make it fill the whole
+        # chart. Keep the market map static and use a compact selector for details.
+        st.plotly_chart(
+            heatmap_fig,
+            use_container_width=True,
+            config={"staticPlot": True, "displayModeBar": False, "displaylogo": False},
+        )
+        detail_col, source_col = st.columns([2, 1])
+        with detail_col:
             selected_ticker = st.selectbox(
-                "종목 상세 보기",
+                "Quick detail",
                 ["선택하세요"] + df["Ticker"].astype(str).tolist(),
                 key=f"heatmap_detail_select_{mode}_{title}",
             )
-            if selected_ticker == "선택하세요":
-                selected_ticker = None
+        with source_col:
+            sources = sorted({str(v) for v in df.get("Source", pd.Series(dtype=str)).dropna() if str(v)})
+            st.caption("Data source: " + (", ".join(sources) if sources else "Unavailable"))
+        if selected_ticker == "선택하세요":
+            selected_ticker = None
 
         if selected_ticker and selected_ticker in set(df["Ticker"].astype(str).str.upper()):
             _render_ticker_detail(selected_ticker)

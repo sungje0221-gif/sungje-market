@@ -1,3 +1,8 @@
+# v3.18.1
+- Clean distribution: removed Python bytecode/cache artifacts.
+- Fixed outer heatmap caches to 20 seconds so live quote refresh is not held for 5 minutes.
+- Kept static treemap behavior and compact ticker detail selector.
+
 # v3.15 Portfolio Cloud & Health
 - Added Supabase-backed portfolio_positions storage keyed by profile/account/ticker.
 - Added total value, cost, P/L, today's P/L, risk and diversification summary.
@@ -13,3 +18,9 @@
 - Added transaction history, per-ticker realized P/L, win rate, and delete controls.
 - Added optional synchronization with Manual Portfolio holdings.
 - Added local transaction ledger at data/transactions.csv.
+
+## v3.18 — Live Heatmap Fix
+- Replaced daily-history percentage calculations with live previous-close quote fields.
+- Added Schwab batch quote priority with Yahoo live fallback.
+- Added market-cap tile sizing.
+- Disabled treemap leaf zoom and added compact detail selection.
