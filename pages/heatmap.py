@@ -44,17 +44,21 @@ SECTOR_ETFS = {
 
 @st.cache_data(ttl=300, show_spinner=False)
 def build_rows(tickers: tuple[str, ...], sector_name: str | None = None) -> pd.DataFrame:
-    # Heatmap loading must stay fast: use a single batch quote request and equal
-    # tile sizes. Fundamentals are fetched only after the user selects a symbol.
+    # 배치 시세 및 시가총액 정보 로드
     quote_map = batch_quotes(tickers)
     rows = []
     for ticker in tickers:
         q = quote_map.get(ticker, {})
+        info = ticker_info(ticker)
+        
+        # 박스 크기를 자산규모(시가총액: marketCap) 기반으로 설정 (기본 최소값 지정)
+        market_cap = info.get("marketCap") or q.get("marketCap") or 1_000_000_000
+        
         rows.append({
             "Ticker": ticker,
             "Price": q.get("price"),
             "Change %": q.get("change_pct"),
-            "Weight": 1.0,
+            "Weight": float(market_cap),  # 자산 규모(시총)를 Weight로 반영
             "Sector": sector_name or "Market",
         })
     return pd.DataFrame(rows)
@@ -77,7 +81,6 @@ def _summary(df: pd.DataFrame):
         return 0, 0, 0.0, "—", "—", 0.0
     adv = int((valid["Change %"] > 0).sum())
     dec = int((valid["Change %"] < 0).sum())
-    flat = max(len(valid) - adv - dec, 0)
     breadth = (adv - dec) / max(len(valid), 1) * 100
     return (
         adv, dec, float(valid["Change %"].mean()),
@@ -92,8 +95,6 @@ def _stat_card(label, value, note, tone="blue"):
         f'<div class="heat-stat {tone}"><span>{label}</span><b>{value}</b><em>{note}</em></div>',
         unsafe_allow_html=True,
     )
-
-
 
 
 def _money(value):
@@ -197,7 +198,7 @@ def _render_ticker_detail(ticker: str):
 def render():
     st.markdown('<div class="page-kicker">LIVE MARKET MAP · VERSION 3.00</div>', unsafe_allow_html=True)
     st.title("Market Heatmap")
-    st.caption("시가총액, 등락률, 시장 폭과 섹터 순환을 한 화면에서 확인합니다. 데이터는 Yahoo Finance 기준입니다.")
+    st.caption("시가총액(자산규모) 비중, 등락률, 시장 폭과 섹터 순환을 한 화면에서 확인합니다.")
 
     sector_df = sector_snapshot()
     valid_sector = sector_df.dropna(subset=["Change %"]).sort_values("Change %", ascending=False)
@@ -253,7 +254,15 @@ def render():
         with stats[5]: _stat_card("LAGGARD", worst, "Weakest", "red")
 
         heatmap_fig = stock_heatmap(df, title)
+        
+        # 줌(Zoom in) 방지 옵션 적용
+        heatmap_fig.update_traces(
+            maxdepth=2,
+            root_color="rgba(0,0,0,0)"
+        )
+
         selected_ticker = st.session_state.get("heatmap_selected_ticker")
+        
         if plotly_events is not None:
             clicks = plotly_events(
                 heatmap_fig,
