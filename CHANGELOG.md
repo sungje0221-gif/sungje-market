@@ -1,3 +1,10 @@
+
+## v3.18.3
+- Restored click-to-open ticker details on the market heatmap.
+- Added chart ranges: 1D, 5D, 1M, 3M, 6M, 1Y, 5Y.
+- Added candle intervals from 1-minute through 1-day, constrained to Yahoo-supported range/interval combinations.
+- Reused the full OHLCV advanced chart with volume and indicators.
+- Preserved the corrected daily percentage calculation from v3.18.2.
 # v3.18.1
 - Clean distribution: removed Python bytecode/cache artifacts.
 - Fixed outer heatmap caches to 20 seconds so live quote refresh is not held for 5 minutes.
