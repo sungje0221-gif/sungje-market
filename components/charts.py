@@ -183,7 +183,7 @@ def stock_heatmap(df, title="Market Heat Map"):
 
     fig = go.Figure(go.Treemap(
         labels=labels,
-        parents=[""] * len(labels),
+        parents=clean["Sector"].tolist(),
         values=values,
         marker=dict(
             colors=changes,
@@ -210,6 +210,7 @@ def stock_heatmap(df, title="Market Heat Map"):
         ),
         pathbar=dict(visible=False),
         tiling=dict(packing="squarify", pad=2),
+        branchvalues="total",
     ))
     fig.update_layout(
         title=title,
