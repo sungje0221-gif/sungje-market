@@ -3,6 +3,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 import plotly.graph_objects as go
+from streamlit_plotly_events import plotly_events
 
 from components.charts import advanced_chart, market_breadth_bar, performance_matrix, stock_heatmap
 from engine.fundamentals import ticker_info
@@ -249,7 +250,7 @@ def _render_ticker_detail(ticker: str):
 
 
 def render():
-    st.markdown('<div class="page-kicker">LIVE MARKET MAP · VERSION 3.18.3</div>', unsafe_allow_html=True)
+    st.markdown('<div class="page-kicker">LIVE MARKET MAP · VERSION 3.18.5</div>', unsafe_allow_html=True)
     st.title("Market Heatmap")
     st.caption("현재가와 전일 종가 기준 등락률을 사용합니다. Schwab 연결 시 Schwab 실시간 시세를 우선하고, 나머지는 Yahoo chart의 동일 세션 현재가와 전일 종가를 사용합니다.")
 
@@ -307,22 +308,25 @@ def render():
         with stats[5]: _stat_card("LAGGARD", worst, "Weakest", "red")
 
         heatmap_fig = stock_heatmap(df, title)
-        event = st.plotly_chart(
+        # Use click events instead of Streamlit's native Plotly selection.
+        # Native selection mutates the treemap selection state on rerun and can
+        # make the clicked tile appear to expand/reflow. This component returns
+        # the clicked label without applying any selection styling to the map.
+        clicked_points = plotly_events(
             heatmap_fig,
-            use_container_width=True,
-            config={"displayModeBar": False, "displaylogo": False, "scrollZoom": False},
-            on_select="rerun",
-            selection_mode="points",
+            click_event=True,
+            select_event=False,
+            hover_event=False,
+            override_height=560,
             key=f"heatmap_chart_{mode}_{title}",
         )
 
         selected_from_click = None
-        try:
-            points = event.selection.points
-            if points:
-                selected_from_click = str(points[0].get("label") or points[0].get("text") or "").upper()
-        except (AttributeError, TypeError, IndexError):
-            pass
+        if clicked_points:
+            point = clicked_points[0]
+            selected_from_click = str(
+                point.get("label") or point.get("id") or point.get("text") or ""
+            ).upper()
 
         if selected_from_click and selected_from_click in set(df["Ticker"].astype(str).str.upper()):
             st.session_state["heatmap_selected_ticker"] = selected_from_click

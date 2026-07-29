@@ -215,6 +215,7 @@ def stock_heatmap(df, title="Market Heat Map"):
         tiling=dict(packing="squarify", pad=2),
         branchvalues="total",
         sort=True,
+        maxdepth=1,
     ))
     fig.update_layout(
         title=title,

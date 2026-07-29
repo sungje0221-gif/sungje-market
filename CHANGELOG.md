@@ -37,3 +37,7 @@
 - Schwab percentages are recalculated from current price and previous close instead of trusting a potentially mismatched percentage field.
 - All treemaps are static to prevent a clicked tile from expanding to fill the chart.
 - Removed runtime cache artifacts from the distribution ZIP.
+
+## 3.18.5
+- Heatmap tiles use market-cap Weight values.
+- Replaced native Plotly selection with click-only events so clicking updates details without changing treemap layout.
