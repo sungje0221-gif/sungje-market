@@ -195,9 +195,9 @@ def _render_ticker_detail(ticker: str):
 
 
 def render():
-    st.markdown('<div class="page-kicker">LIVE MARKET MAP · VERSION 3.18.1</div>', unsafe_allow_html=True)
+    st.markdown('<div class="page-kicker">LIVE MARKET MAP · VERSION 3.18.2</div>', unsafe_allow_html=True)
     st.title("Market Heatmap")
-    st.caption("현재가와 전일 종가 기준 등락률을 사용합니다. Schwab 연결 시 Schwab 실시간 시세를 우선하고, 나머지는 Yahoo live quote를 사용합니다.")
+    st.caption("현재가와 전일 종가 기준 등락률을 사용합니다. Schwab 연결 시 Schwab 실시간 시세를 우선하고, 나머지는 Yahoo chart의 동일 세션 현재가와 전일 종가를 사용합니다.")
 
     sector_df = sector_snapshot()
     valid_sector = sector_df.dropna(subset=["Change %"]).sort_values("Change %", ascending=False)
@@ -300,7 +300,7 @@ def render():
         st.plotly_chart(
             stock_heatmap(sector_map_df, "US Sector Rotation"),
             use_container_width=True,
-            config={"displaylogo": False},
+            config={"staticPlot": True, "displayModeBar": False, "displaylogo": False},
         )
         st.plotly_chart(
             market_breadth_bar(sector_map_df),

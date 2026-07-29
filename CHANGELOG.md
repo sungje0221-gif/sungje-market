@@ -24,3 +24,9 @@
 - Added Schwab batch quote priority with Yahoo live fallback.
 - Added market-cap tile sizing.
 - Disabled treemap leaf zoom and added compact detail selection.
+
+## v3.18.2
+- Heatmap daily change now uses Yahoo chart metadata (`regularMarketPrice` / `chartPreviousClose`) from the same session.
+- Schwab percentages are recalculated from current price and previous close instead of trusting a potentially mismatched percentage field.
+- All treemaps are static to prevent a clicked tile from expanding to fill the chart.
+- Removed runtime cache artifacts from the distribution ZIP.

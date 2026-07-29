@@ -195,9 +195,7 @@ def _schwab_quote(ticker: str) -> dict[str, Any] | None:
             quote_data.get("closePrice")
             or reference.get("previousClose")
         )
-        net_pct = quote_data.get("netPercentChange")
-        if net_pct is None and price is not None and previous_close:
-            net_pct = (float(price) / float(previous_close) - 1) * 100
+        net_pct = (float(price) / float(previous_close) - 1) * 100 if price is not None and previous_close else None
 
         change_abs = quote_data.get("netChange")
         if change_abs is None and price is not None and previous_close is not None:
@@ -219,34 +217,68 @@ def _schwab_quote(ticker: str) -> dict[str, Any] | None:
         return None
 
 
+def _yahoo_chart_quote(ticker: str) -> dict[str, Any]:
+    """Return Yahoo's regular-market quote and true previous close.
+
+    ``fast_info.previous_close`` can lag or point at the wrong session for a
+    whole batch. Yahoo's chart metadata exposes ``regularMarketPrice`` and
+    ``chartPreviousClose`` from the same market session, which keeps the
+    displayed price and daily percentage on one consistent basis.
+    """
+    try:
+        response = requests.get(
+            f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}",
+            params={
+                "range": "1d",
+                "interval": "1m",
+                "includePrePost": "false",
+                "events": "div,splits",
+            },
+            headers={"User-Agent": "Mozilla/5.0"},
+            timeout=12,
+        )
+        response.raise_for_status()
+        result = response.json().get("chart", {}).get("result") or []
+        if not result:
+            return _empty_quote("Yahoo unavailable")
+        meta = result[0].get("meta", {}) or {}
+        price = _number(meta.get("regularMarketPrice"))
+        previous_close = _number(meta.get("chartPreviousClose") or meta.get("previousClose"))
+        if price is None:
+            return _empty_quote("Yahoo unavailable")
+        change_abs = price - previous_close if previous_close is not None else None
+        change_pct = (change_abs / previous_close * 100) if previous_close else None
+        return {
+            "price": price,
+            "previous_close": previous_close,
+            "change_pct": change_pct,
+            "change_abs": change_abs,
+            "day_low": _number(meta.get("regularMarketDayLow")),
+            "day_high": _number(meta.get("regularMarketDayHigh")),
+            "volume": _number(meta.get("regularMarketVolume")),
+            "bid": None, "ask": None, "last": price, "mark": price,
+            "market_cap": None,
+            "source": "Yahoo chart",
+            "as_of": meta.get("regularMarketTime"),
+        }
+    except (requests.RequestException, ValueError, TypeError, KeyError):
+        return _empty_quote("Yahoo unavailable")
+
+
 @st.cache_data(ttl=20, show_spinner=False)
 def quote(ticker: str) -> dict[str, Any]:
-    """Return a live single-symbol quote using the provider previous close."""
+    """Return one live quote with price and percentage on the same session."""
     schwab = _schwab_quote(ticker)
     if schwab and schwab.get("price") is not None:
         return schwab
 
-    try:
-        fast = yf.Ticker(ticker).fast_info
-        price = _number(fast.get("last_price"))
-        previous = _number(fast.get("previous_close"))
-        if price is None:
-            return _empty_quote("Yahoo unavailable")
-        return {
-            "price": price,
-            "previous_close": previous,
-            "change_pct": (price / previous - 1) * 100 if previous else None,
-            "change_abs": price - previous if previous is not None else None,
-            "day_low": _number(fast.get("day_low")),
-            "day_high": _number(fast.get("day_high")),
-            "volume": _number(fast.get("last_volume") or fast.get("three_month_average_volume")),
-            "bid": None, "ask": None, "last": price, "mark": price,
-            "market_cap": _number(fast.get("market_cap")),
-            "source": "Yahoo live",
-            "as_of": None,
-        }
-    except Exception:
-        return _empty_quote("Yahoo unavailable")
+    result = _yahoo_chart_quote(ticker)
+    if result.get("price") is not None:
+        try:
+            result["market_cap"] = _number(yf.Ticker(ticker).fast_info.get("market_cap"))
+        except Exception:
+            result["market_cap"] = None
+    return result
 
 
 @st.cache_data(ttl=900, show_spinner=False)
@@ -293,9 +325,7 @@ def batch_quotes(tickers: tuple[str, ...]) -> dict[str, dict[str, Any]]:
                     reference = item.get("reference", {}) or {}
                     price = _number(quote_data.get("lastPrice") or quote_data.get("mark"))
                     previous_close = _number(reference.get("previousClose") or quote_data.get("closePrice"))
-                    change_pct = _number(quote_data.get("netPercentChange"))
-                    if change_pct is None and price is not None and previous_close:
-                        change_pct = (price / previous_close - 1) * 100
+                    change_pct = (price / previous_close - 1) * 100 if price is not None and previous_close else None
                     if price is None:
                         continue
                     results[ticker] = {
@@ -322,28 +352,7 @@ def batch_quotes(tickers: tuple[str, ...]) -> dict[str, dict[str, Any]]:
     missing = [ticker for ticker in symbols if results[ticker].get("price") is None]
 
     def yahoo_fast_quote(ticker: str) -> tuple[str, dict[str, Any]]:
-        try:
-            fast = yf.Ticker(ticker).fast_info
-            price = _number(fast.get("last_price"))
-            previous_close = _number(fast.get("previous_close"))
-            if price is None:
-                return ticker, _empty_quote("Yahoo unavailable")
-            change_pct = (price / previous_close - 1) * 100 if previous_close else None
-            return ticker, {
-                "price": price,
-                "previous_close": previous_close,
-                "change_pct": change_pct,
-                "change_abs": price - previous_close if previous_close is not None else None,
-                "day_low": _number(fast.get("day_low")),
-                "day_high": _number(fast.get("day_high")),
-                "volume": _number(fast.get("last_volume") or fast.get("three_month_average_volume")),
-                "bid": None, "ask": None, "last": price, "mark": price,
-                "market_cap": _number(fast.get("market_cap")),
-                "source": "Yahoo live",
-                "as_of": None,
-            }
-        except Exception:
-            return ticker, _empty_quote("Yahoo unavailable")
+        return ticker, _yahoo_chart_quote(ticker)
 
     if missing:
         with ThreadPoolExecutor(max_workers=min(8, len(missing))) as executor:
