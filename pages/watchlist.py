@@ -266,6 +266,19 @@ def render() -> None:
         st.markdown("### Daily Movers")
         st.caption("기본적으로 가장 많이 내린 종목부터 정렬됩니다. 위 Sort 메뉴에서 바로 변경할 수 있습니다.")
         _mover_table(filtered, quotes)
+        with st.popover("🗑 종목 삭제", use_container_width=False):
+            to_remove = st.multiselect(
+                "삭제할 종목 선택",
+                [r["ticker"] for r in filtered],
+                key="watch_bulk_remove_select",
+                label_visibility="collapsed",
+                placeholder="삭제할 티커 선택",
+            )
+            if st.button("선택한 종목 삭제", type="primary", disabled=not to_remove, key="watch_bulk_remove_btn"):
+                for ticker in to_remove:
+                    delete_watchlist_item(ticker, records)
+                st.session_state.pop("watch_selected", None)
+                st.rerun()
 
     if view != "Table only":
         st.markdown("### My Investment Cards")
@@ -285,6 +298,7 @@ def render() -> None:
         .watch-spark{width:100%;height:38px;margin:7px 0 4px}.watch-spark-empty{height:38px;display:flex;align-items:center;justify-content:center;color:#61758e}
         .wc-footer{display:flex;justify-content:space-between;align-items:center;border-top:1px solid #20344b;padding-top:7px}.wc-ai{font-size:10px;color:#8fa4bb}.wc-ai b{color:#e9f1fb;font-size:12px}.wc-action{font-size:10px;font-weight:900;border:1px solid #38526f;border-radius:999px;padding:3px 7px;color:#dcecff}
         .wc-volume{font-size:9px;color:#71869f;margin-top:3px}.wc-signal{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:4px;font-size:9px;color:#71869f}.wc-signal b{display:block;color:#cdd9e8;font-size:10px;margin-top:1px}.wc-source{font-size:8px;color:#60758e;margin-top:5px;text-align:right}
+        button[title$="Watchlist에서 삭제"]{min-height:26px;padding:0 6px}
         </style>''', unsafe_allow_html=True)
 
         for start in range(0, len(filtered), 5):
@@ -305,6 +319,12 @@ def render() -> None:
                 day_change = q.get("change_abs")
                 href = f"?watch={ticker}"
                 with col:
+                    top_l, top_r = st.columns([4.2, 1])
+                    with top_r:
+                        if st.button("✕", key=f"watch_del_{ticker}", help=f"{ticker} Watchlist에서 삭제", use_container_width=True):
+                            delete_watchlist_item(ticker, records)
+                            st.session_state.pop("watch_selected", None)
+                            st.rerun()
                     st.markdown(f'''<a class="watch-card-link" href="{href}" target="_self">
                     <div class="watch-card-v310">
                       <div class="wc-head"><span class="wc-ticker">{pin}{ticker}</span><span class="wc-tag">{row.get("tag", "Watch")}</span></div>
