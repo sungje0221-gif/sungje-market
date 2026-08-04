@@ -226,9 +226,10 @@ def stock_heatmap(df, title="Market Heat Map"):
         paper_bgcolor="#0c1828",
         plot_bgcolor="#0c1828",
         template="plotly_dark",
-        # Preserve the same treemap layout across Streamlit reruns triggered
-        # by a ticker click; only the detail panel should update.
-        uirevision=f"heatmap-{title}",
+        # NOTE: no uirevision here on purpose. Treemaps have their own native
+        # "zoom into clicked node" browser behavior; keeping uirevision fixed
+        # across reruns made Plotly.js preserve that zoomed-in state forever
+        # instead of resetting to the full map after each click+rerun.
     )
     return fig
 

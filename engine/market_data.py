@@ -12,6 +12,51 @@ from engine.schwab import SchwabError, access_token, connection_status
 
 SCHWAB_MARKETDATA_BASE_URL = "https://api.schwabapi.com/marketdata/v1"
 
+# Fallback market-cap table (approximate, USD) used only when the live
+# yfinance lookup fails or is blocked, which happens often on Streamlit
+# Cloud's IP ranges. Values are rough order-of-magnitude snapshots, not
+# live figures -- good enough to size heatmap tiles relative to each other,
+# never used for anything financial. ETFs use approximate AUM instead.
+STATIC_MARKET_CAP_FALLBACK: dict[str, float] = {
+    "NVDA": 3.4e12, "MSFT": 3.1e12, "AAPL": 3.2e12, "GOOGL": 2.1e12, "AMZN": 2.1e12,
+    "META": 1.5e12, "AVGO": 1.1e12, "BRK-B": 1.0e12, "TSLA": 1.0e12, "TSM": 1.0e12,
+    "JPM": 6.5e11, "LLY": 7.5e11, "V": 5.7e11, "XOM": 4.7e11, "WMT": 7.5e11,
+    "MA": 4.6e11, "COST": 4.2e11, "JNJ": 3.8e11, "NFLX": 4.4e11, "HD": 3.5e11,
+    "PG": 3.7e11, "ORCL": 5.5e11, "ABBV": 3.5e11, "BAC": 3.3e11, "KO": 2.8e11,
+    "CRM": 2.6e11, "CVX": 2.7e11, "PM": 2.3e11, "IBM": 2.4e11, "GE": 2.3e11,
+    "CAT": 2.2e11, "UNH": 2.7e11, "AMD": 2.2e11, "PLTR": 3.0e11, "CSCO": 2.6e11,
+    "TMUS": 2.5e11, "LIN": 2.2e11, "PEP": 2.1e11, "ADBE": 1.7e11, "INTU": 1.9e11,
+    "AMGN": 1.6e11, "QCOM": 1.7e11, "TXN": 1.7e11, "BKNG": 1.8e11, "AMAT": 1.5e11,
+    "PANW": 1.3e11, "GILD": 1.3e11, "HON": 1.3e11, "MU": 1.2e11, "SBUX": 1.1e11,
+    "MELI": 1.2e11, "ADI": 1.1e11, "ASML": 3.5e11, "LRCX": 1.2e11, "KLAC": 1.2e11,
+    "SMCI": 2.5e10, "VRT": 6.0e10, "ETN": 1.3e11, "ANET": 1.2e11, "GLW": 5.0e10,
+    "CEG": 9.0e10, "VST": 5.5e10, "GEV": 1.5e11, "PWR": 6.0e10, "DELL": 8.0e10,
+    "HPE": 3.0e10, "MRVL": 8.0e10, "ARM": 1.5e11, "CRDO": 1.5e10, "ALAB": 1.5e10,
+    "WFC": 2.4e11, "GS": 2.0e11, "MS": 2.0e11, "AXP": 2.1e11, "BLK": 1.6e11,
+    "SCHW": 1.5e11, "COF": 8.0e10, "C": 1.5e11, "MRK": 2.5e11, "TMO": 2.0e11,
+    "ABT": 2.2e11, "ISRG": 2.0e11, "VRTX": 1.3e11, "PFE": 1.4e11, "RTX": 2.0e11,
+    "UNP": 1.4e11, "BA": 1.3e11, "LMT": 1.1e11, "DE": 1.3e11, "UPS": 9.0e10,
+    "COP": 1.2e11, "EOG": 7.0e10, "SLB": 6.0e10, "OXY": 4.5e10, "MPC": 5.0e10,
+    "VLO": 4.5e10, "PSX": 5.5e10, "WMB": 6.5e10, "OKE": 5.0e10, "FANG": 4.0e10,
+    "NEE": 1.5e11, "SO": 1.0e11, "DUK": 9.0e10, "AEP": 6.0e10, "SRE": 5.5e10,
+    "D": 4.5e10, "EXC": 4.0e10, "PCG": 4.0e10, "NRG": 3.0e10, "AES": 1.0e10,
+    "RKLB": 2.0e10, "ASTS": 1.5e10, "LUNR": 2.0e9, "PL": 2.0e9, "KTOS": 8.0e9,
+    "NOC": 8.0e10, "GD": 8.0e10, "ACHR": 5.0e9, "JOBY": 6.0e9,
+    "MCD": 2.2e11, "TJX": 1.4e11, "LOW": 1.3e11, "NKE": 8.0e10, "CAVA": 1.0e10,
+    "CMG": 6.0e10, "DIS": 2.0e11, "T": 1.9e11, "VZ": 1.8e11, "CMCSA": 1.4e11,
+    "SPOT": 1.2e11, "RDDT": 3.0e10, "PINS": 3.0e10, "SNAP": 1.5e10,
+    "VOO": 5.5e11, "SPY": 6.0e11, "QQQ": 3.2e11, "QQQM": 3.5e10, "VXF": 3.0e10,
+    "IWM": 6.0e10, "IJH": 8.0e10, "SMH": 3.5e10, "SOXX": 1.0e10, "XLK": 7.5e10,
+    "XLC": 2.0e10, "XLY": 2.0e10, "XLF": 5.0e10, "XLI": 2.0e10, "XLV": 1.8e10,
+    "XLE": 3.5e10, "XLU": 1.8e10, "XLRE": 6.0e9, "XLP": 1.6e10, "XLB": 6.0e9,
+    "ITA": 8.0e9, "NLR": 1.5e9, "SCHD": 7.0e10, "VYM": 6.0e10, "DGRO": 3.5e10,
+    "GLD": 9.0e10, "SLV": 1.5e10, "COPX": 2.5e9, "EWY": 6.0e9, "KORU": 5.0e7,
+}
+
+
+def _static_market_cap(ticker: str) -> float | None:
+    return STATIC_MARKET_CAP_FALLBACK.get(ticker.upper())
+
 
 # Korean market data is intentionally isolated from Yahoo Finance.
 # Naver Finance's domestic realtime endpoint is used because it is deployable
@@ -275,9 +320,10 @@ def quote(ticker: str) -> dict[str, Any]:
     result = _yahoo_chart_quote(ticker)
     if result.get("price") is not None:
         try:
-            result["market_cap"] = _number(yf.Ticker(ticker).fast_info.get("market_cap"))
+            live_cap = _number(yf.Ticker(ticker).fast_info.get("market_cap"))
+            result["market_cap"] = live_cap if live_cap else _static_market_cap(ticker)
         except Exception:
-            result["market_cap"] = None
+            result["market_cap"] = _static_market_cap(ticker)
     return result
 
 
@@ -366,9 +412,12 @@ def batch_quotes(tickers: tuple[str, ...]) -> dict[str, dict[str, Any]]:
     schwab_symbols = [ticker for ticker in symbols if results[ticker].get("price") is not None and results[ticker].get("market_cap") is None]
     def market_cap_only(ticker: str) -> tuple[str, float | None]:
         try:
-            return ticker, _number(yf.Ticker(ticker).fast_info.get("market_cap"))
+            live = _number(yf.Ticker(ticker).fast_info.get("market_cap"))
+            if live:
+                return ticker, live
         except Exception:
-            return ticker, None
+            pass
+        return ticker, _static_market_cap(ticker)
     if schwab_symbols:
         with ThreadPoolExecutor(max_workers=min(8, len(schwab_symbols))) as executor:
             futures = [executor.submit(market_cap_only, ticker) for ticker in schwab_symbols]
