@@ -223,13 +223,13 @@ def render() -> None:
         .top-quote span{{display:block;font-size:9px;color:#7890a8;text-transform:uppercase;letter-spacing:.08em;white-space:nowrap}}
         .top-quote b{{display:block;font-size:16px;margin-top:3px;white-space:nowrap}}
         .top-quote em{{display:block;font-style:normal;font-size:10px;margin-top:1px;font-weight:850}}
-        .top-spark{{width:100%;height:18px;margin-top:4px;overflow:visible}}.top-spark polyline,.top-spark path{{fill:none;stroke:#7c8ea2;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;opacity:.9}}.top-spark.spark-up polyline{{stroke:#35d6a5}}.top-spark.spark-down polyline{{stroke:#ff6474}}
+        .top-spark{{width:100%;height:18px;margin-top:4px;overflow:visible}}.top-spark polyline,.top-spark path{{fill:none;stroke:#7c8ea2;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;opacity:.9}}.top-spark.spark-up polyline{{stroke:#4da3ff}}.top-spark.spark-down polyline{{stroke:#ff6474}}
         .priority-grid-note{{font-size:9px;color:#70869c;margin-top:-5px;margin-bottom:8px}}
         .priority-card{{min-height:88px;padding:12px 13px;border-radius:13px;background:linear-gradient(180deg,rgba(14,30,49,.98),rgba(7,18,31,.98));border:1px solid rgba(148,163,184,.14);display:grid;grid-template-columns:minmax(0,1fr) 126px;gap:12px;align-items:center}}
         .priority-left{{min-width:0}}.priority-right{{display:flex;flex-direction:column;align-items:flex-end;justify-content:space-between;min-height:62px}}
         .priority-top{{display:flex;align-items:center;justify-content:space-between;gap:8px}}.priority-top b{{font-size:14px;letter-spacing:.01em}}.priority-score{{font-size:9px;padding:3px 7px;border-radius:999px;color:#9cb2c8;border:1px solid rgba(148,163,184,.18)}}
         .priority-price{{font-size:20px;font-weight:850;line-height:1.15;margin-top:5px;white-space:nowrap}}.priority-change{{font-size:11px;font-weight:850;margin-top:3px}}
-        .priority-spark{{width:120px;height:34px;overflow:visible}}.priority-spark polyline,.priority-spark path{{fill:none;stroke:#7c8ea2;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;opacity:.92}}.priority-spark.spark-up polyline{{stroke:#35d6a5}}.priority-spark.spark-down polyline{{stroke:#ff6474}}
+        .priority-spark{{width:120px;height:34px;overflow:visible}}.priority-spark polyline,.priority-spark path{{fill:none;stroke:#7c8ea2;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;opacity:.92}}.priority-spark.spark-up polyline{{stroke:#4da3ff}}.priority-spark.spark-down polyline{{stroke:#ff6474}}
         .priority-tag{{display:inline-block;font-size:9px;font-weight:900;letter-spacing:.09em;padding:3px 9px;border-radius:999px;background:rgba(100,166,255,.09);color:#64a6ff}}
         .priority-tag.buy{{color:#35d6a5;background:rgba(53,214,165,.09)}}.priority-tag.risk{{color:#ff6474;background:rgba(255,100,116,.09)}}.priority-tag.move{{color:#f3c969;background:rgba(243,201,105,.09)}}
         .market-group-panel{{border-radius:15px;padding:18px 18px;background:linear-gradient(180deg,rgba(13,29,48,.98),rgba(8,20,34,.98));border:1px solid rgba(148,163,184,.14)}}

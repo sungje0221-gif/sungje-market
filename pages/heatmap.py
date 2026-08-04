@@ -6,6 +6,7 @@ import plotly.graph_objects as go
 from streamlit_plotly_events import plotly_events
 
 from components.charts import advanced_chart, market_breadth_bar, performance_matrix, stock_heatmap
+from components.colored_tables import style_signed_columns
 from engine.fundamentals import ticker_info
 from engine.market_data import batch_quotes, history, intraday_history, quote
 from utils.storage import load_json
@@ -71,21 +72,18 @@ SECTOR_ETFS = {
 
 @st.cache_data(ttl=20, show_spinner=False)
 def build_rows(tickers: tuple[str, ...], sector_name: str | None = None) -> pd.DataFrame:
-    # 배치 시세 및 시가총액 정보 로드
+    # Heatmap loading must stay fast: use a single batch quote request and equal
+    # tile sizes. Fundamentals are fetched only after the user selects a symbol.
     quote_map = batch_quotes(tickers)
     rows = []
     for ticker in tickers:
         q = quote_map.get(ticker, {})
-        info = ticker_info(ticker)
-        
-        # 박스 크기를 자산규모(시가총액: marketCap) 기반으로 설정 (기본 최소값 지정)
-        market_cap = info.get("marketCap") or q.get("marketCap") or 1_000_000_000
-        
         rows.append({
             "Ticker": ticker,
             "Price": q.get("price"),
             "Change %": q.get("change_pct"),
-            "Weight": float(market_cap),  # 자산 규모(시총)를 Weight로 반영
+            "Weight": q.get("market_cap") or 1.0,
+            "Source": q.get("source") or "Unavailable",
             "Sector": sector_name or "Market",
         })
     return pd.DataFrame(rows)
@@ -108,6 +106,7 @@ def _summary(df: pd.DataFrame):
         return 0, 0, 0.0, "—", "—", 0.0
     adv = int((valid["Change %"] > 0).sum())
     dec = int((valid["Change %"] < 0).sum())
+    flat = max(len(valid) - adv - dec, 0)
     breadth = (adv - dec) / max(len(valid), 1) * 100
     return (
         adv, dec, float(valid["Change %"].mean()),
@@ -122,6 +121,8 @@ def _stat_card(label, value, note, tone="blue"):
         f'<div class="heat-stat {tone}"><span>{label}</span><b>{value}</b><em>{note}</em></div>',
         unsafe_allow_html=True,
     )
+
+
 
 
 def _money(value):
@@ -252,7 +253,7 @@ def _render_ticker_detail(ticker: str):
 def render():
     st.markdown('<div class="page-kicker">LIVE MARKET MAP · VERSION 3.18.5</div>', unsafe_allow_html=True)
     st.title("Market Heatmap")
-    st.caption("시가총액, 등락률, 시장 폭과 섹터 순환을 한 화면에서 확인합니다. 데이터는 Yahoo Finance 기준입니다.")
+    st.caption("현재가와 전일 종가 기준 등락률을 사용합니다. Schwab 연결 시 Schwab 실시간 시세를 우선하고, 나머지는 Yahoo chart의 동일 세션 현재가와 전일 종가를 사용합니다.")
 
     sector_df = sector_snapshot()
     valid_sector = sector_df.dropna(subset=["Change %"]).sort_values("Change %", ascending=False)
@@ -308,31 +309,36 @@ def render():
         with stats[5]: _stat_card("LAGGARD", worst, "Weakest", "red")
 
         heatmap_fig = stock_heatmap(df, title)
-        selected_ticker = st.session_state.get("heatmap_selected_ticker")
-        if plotly_events is not None:
-            clicks = plotly_events(
-                heatmap_fig,
-                click_event=True,
-                hover_event=False,
-                select_event=False,
-                override_height=560,
-                key=f"heatmap_click_{mode}_{title}",
-            )
-            if clicks:
-                point = clicks[0]
-                label = point.get("label") or point.get("text")
-                if not label and point.get("pointNumber") is not None:
-                    try:
-                        label = str(df.iloc[int(point["pointNumber"])]["Ticker"])
-                    except Exception:
-                        label = None
-                if label:
-                    st.session_state["heatmap_selected_ticker"] = str(label).upper()
-                    selected_ticker = str(label).upper()
-        else:
-            st.plotly_chart(heatmap_fig, use_container_width=True, config={"displaylogo": False, "scrollZoom": False})
-            selected_ticker = st.selectbox(
-                "종목 상세 보기",
+        # Use click events instead of Streamlit's native Plotly selection.
+        # Native selection mutates the treemap selection state on rerun and can
+        # make the clicked tile appear to expand/reflow. This component returns
+        # the clicked label without applying any selection styling to the map.
+        clicked_points = plotly_events(
+            heatmap_fig,
+            click_event=True,
+            select_event=False,
+            hover_event=False,
+            override_height=560,
+            key=f"heatmap_chart_{mode}_{title}",
+        )
+
+        selected_from_click = None
+        if clicked_points:
+            point = clicked_points[0]
+            selected_from_click = str(
+                point.get("label") or point.get("id") or point.get("text") or ""
+            ).upper()
+
+        if selected_from_click and selected_from_click in set(df["Ticker"].astype(str).str.upper()):
+            st.session_state["heatmap_selected_ticker"] = selected_from_click
+
+        source_col, fallback_col = st.columns([1, 2])
+        with source_col:
+            sources = sorted({str(v) for v in df.get("Source", pd.Series(dtype=str)).dropna() if str(v)})
+            st.caption("Data source: " + (", ".join(sources) if sources else "Unavailable"))
+        with fallback_col:
+            fallback = st.selectbox(
+                "종목 직접 선택",
                 ["선택하세요"] + df["Ticker"].astype(str).tolist(),
                 key=f"heatmap_detail_select_{mode}_{title}",
                 label_visibility="collapsed",
@@ -350,11 +356,13 @@ def render():
         display_cols = ["Ticker", "Price", "Change %", "Sector"]
         with leaders:
             st.markdown("#### Momentum Leaders")
-            st.dataframe(df[display_cols].sort_values("Change %", ascending=False).head(10), use_container_width=True, hide_index=True,
+            leaders_df = df[display_cols].sort_values("Change %", ascending=False).head(10)
+            st.dataframe(style_signed_columns(leaders_df, ["Change %"]), use_container_width=True, hide_index=True,
                          column_config={"Price": st.column_config.NumberColumn(format="$%.2f"), "Change %": st.column_config.NumberColumn(format="%+.2f%%")})
         with laggards:
             st.markdown("#### Pressure List")
-            st.dataframe(df[display_cols].sort_values("Change %").head(10), use_container_width=True, hide_index=True,
+            laggards_df = df[display_cols].sort_values("Change %").head(10)
+            st.dataframe(style_signed_columns(laggards_df, ["Change %"]), use_container_width=True, hide_index=True,
                          column_config={"Price": st.column_config.NumberColumn(format="$%.2f"), "Change %": st.column_config.NumberColumn(format="%+.2f%%")})
 
     with tab_sectors:

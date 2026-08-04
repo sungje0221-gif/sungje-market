@@ -46,6 +46,8 @@ def advanced_chart(
             low=df["Low"],
             close=df["Close"],
             name=ticker,
+            increasing=dict(line=dict(color="#4da3ff"), fillcolor="#4da3ff"),
+            decreasing=dict(line=dict(color="#ff6474"), fillcolor="#ff6474"),
         ),
         row=1,
         col=1,
@@ -195,8 +197,8 @@ def stock_heatmap(df, title="Market Heat Map"):
                 [0.35, "#C94B58"],
                 [0.49, "#5B6472"],
                 [0.51, "#5B6472"],
-                [0.65, "#2D8A70"],
-                [1.00, "#0E5F4D"],
+                [0.65, "#2E6FA8"],
+                [1.00, "#0E4F8F"],
             ],
             cmid=0,
             colorbar=dict(title="Daily %"),
@@ -235,7 +237,7 @@ def market_breadth_bar(df):
     clean = df.dropna(subset=["Change %"]).sort_values("Change %")
     if clean.empty:
         return go.Figure()
-    colors = ["#ff6677" if value < 0 else "#2fd39a" for value in clean["Change %"]]
+    colors = ["#ff6474" if value < 0 else "#4da3ff" for value in clean["Change %"]]
     fig = go.Figure(go.Bar(
         x=clean["Change %"], y=clean["Ticker"], orientation="h",
         marker_color=colors,
@@ -275,7 +277,7 @@ def performance_matrix(df):
         text.append(labels)
     fig = go.Figure(go.Heatmap(
         z=z, x=tickers, y=groups, text=text, texttemplate="%{text}",
-        colorscale=[[0, "#8B1E2D"], [.42, "#d45b68"], [.5, "#26384b"], [.58, "#2D8A70"], [1, "#0E5F4D"]],
+        colorscale=[[0, "#8B1E2D"], [.42, "#d45b68"], [.5, "#26384b"], [.58, "#2E6FA8"], [1, "#0E4F8F"]],
         zmid=0, colorbar=dict(title="Daily %"),
         hovertemplate="<b>%{x}</b><br>%{y}<br>%{z:+.2f}%<extra></extra>",
         xgap=3, ygap=3,

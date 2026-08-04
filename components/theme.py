@@ -16,6 +16,11 @@ def inject_theme() -> None:
           --os-green:#2fd39a;
           --os-red:#ff6677;
           --os-yellow:#f3c969;
+          /* Canonical price-direction colors used app-wide: up = blue, down = red.
+             Any CSS/markup that colors a stock's daily change, P/L, or price move
+             should reference these two variables instead of green/red directly. */
+          --price-up:#4da3ff;
+          --price-down:#ff6474;
         }
         [data-testid="stSidebarNav"] {display:none;}
         [data-testid="stAppViewContainer"] {
@@ -100,6 +105,24 @@ def inject_theme() -> None:
         div[data-testid="stDataFrame"]{border:1px solid var(--os-border);border-radius:14px;overflow:hidden;}
         button[kind="primary"]{border-radius:10px;}
         .delta-up{color:#4DA3FF;font-weight:750}.delta-down{color:#FF6474;font-weight:750}
+        /* st.metric() ships with hardcoded green-up/red-down deltas with no
+           color param besides normal/inverse/off. Override both the delta text
+           and its arrow icon so every metric across the app follows the same
+           blue-up/red-down convention as the rest of the UI. Streamlit renders
+           the delta color as an inline style, so several known color values
+           (current + older Streamlit releases) are matched for robustness. */
+        [data-testid="stMetricDelta"] { color: var(--price-up) !important; }
+        [data-testid="stMetricDelta"] svg { fill: var(--price-up) !important; }
+        [data-testid="stMetricDelta"][style*="rgb(255"] ,
+        [data-testid="stMetricDelta"][style*="255, 43, 43"] ,
+        [data-testid="stMetricDelta"][style*="ff2b2b"] {
+          color: var(--price-down) !important;
+        }
+        [data-testid="stMetricDelta"][style*="rgb(255"] svg,
+        [data-testid="stMetricDelta"][style*="255, 43, 43"] svg,
+        [data-testid="stMetricDelta"][style*="ff2b2b"] svg {
+          fill: var(--price-down) !important;
+        }
         .delta-flat{color:#A9B4C4;font-weight:650}
         .statbox{background:#0c1828;border:1px solid var(--os-border);border-radius:14px;padding:14px 15px;min-height:92px;}
         .statlabel{font-size:10px;letter-spacing:.08em;text-transform:uppercase;opacity:.6}
@@ -196,7 +219,7 @@ def inject_heatmap_v093() -> None:
         .heat-hero{min-height:116px;padding:20px 22px;border-radius:17px;background:radial-gradient(circle at 90% 10%,rgba(47,211,154,.17),transparent 38%),linear-gradient(135deg,rgba(15,32,53,.98),rgba(7,19,33,.98));border:1px solid rgba(47,211,154,.18)}
         .heat-hero span,.heat-stat span{display:block;font-size:9px;letter-spacing:.16em;color:#7890aa;font-weight:900}.heat-hero b{display:block;font-size:29px;letter-spacing:-.04em;margin-top:8px}.heat-hero p{font-size:11px;color:#91a5bb;margin:9px 0 0}.heat-hero strong{color:#d8e4f2}
         .heat-stat{min-height:116px;padding:18px;border-radius:16px;background:linear-gradient(180deg,rgba(14,30,49,.98),rgba(7,18,31,.98));border:1px solid rgba(148,163,184,.14)}
-        .heat-stat b{display:block;font-size:25px;letter-spacing:-.04em;margin-top:10px}.heat-stat em{display:block;font-style:normal;font-size:10px;color:#71869d;margin-top:6px}.heat-stat.green b{color:#2fd39a}.heat-stat.red b{color:#ff6677}.heat-stat.blue b{color:#69a3ff}
+        .heat-stat b{display:block;font-size:25px;letter-spacing:-.04em;margin-top:10px}.heat-stat em{display:block;font-style:normal;font-size:10px;color:#71869d;margin-top:6px}.heat-stat.green b{color:var(--price-up)}.heat-stat.red b{color:var(--price-down)}.heat-stat.blue b{color:#69a3ff}
         [data-testid="stTabs"] [data-baseweb="tab-list"]{gap:8px;background:rgba(8,21,37,.72);padding:6px;border-radius:13px;border:1px solid rgba(148,163,184,.12)}
         [data-testid="stTabs"] button[role="tab"]{border-radius:9px;padding:9px 14px;font-size:12px}
         [data-testid="stTabs"] button[aria-selected="true"]{background:rgba(79,140,255,.17)}
