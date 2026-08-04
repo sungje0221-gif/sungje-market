@@ -218,6 +218,10 @@ def stock_heatmap(df, title="Market Heat Map"):
         branchvalues="total",
         sort=True,
         maxdepth=1,
+        # Force the view back to the root every render. Without this, the
+        # browser can keep its own internal "currently zoomed into this tile"
+        # state across reruns even though the Python figure itself is fine.
+        level="",
     ))
     fig.update_layout(
         title=title,

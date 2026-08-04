@@ -313,13 +313,21 @@ def render():
         # Native selection mutates the treemap selection state on rerun and can
         # make the clicked tile appear to expand/reflow. This component returns
         # the clicked label without applying any selection styling to the map.
+        #
+        # The `key` also embeds a per-click generation counter. Without this,
+        # the underlying React/Plotly component never unmounts between reruns
+        # (same key = same component instance), so the browser can keep its
+        # own internal "zoomed into this tile" state even after we send back
+        # a fresh, un-zoomed figure. Bumping the key forces a clean remount.
+        gen_key = f"heatmap_click_gen_{mode}_{title}"
+        click_gen = st.session_state.get(gen_key, 0)
         clicked_points = plotly_events(
             heatmap_fig,
             click_event=True,
             select_event=False,
             hover_event=False,
             override_height=560,
-            key=f"heatmap_chart_{mode}_{title}",
+            key=f"heatmap_chart_{mode}_{title}_{click_gen}",
         )
 
         selected_from_click = None
@@ -328,6 +336,7 @@ def render():
             selected_from_click = str(
                 point.get("label") or point.get("id") or point.get("text") or ""
             ).upper()
+            st.session_state[gen_key] = click_gen + 1
 
         if selected_from_click and selected_from_click in set(df["Ticker"].astype(str).str.upper()):
             st.session_state["heatmap_selected_ticker"] = selected_from_click
