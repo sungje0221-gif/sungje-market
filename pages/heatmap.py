@@ -3,7 +3,6 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 import plotly.graph_objects as go
-from streamlit_plotly_events import plotly_events
 
 from components.charts import advanced_chart, market_breadth_bar, performance_matrix, stock_heatmap
 from components.colored_tables import style_signed_columns
@@ -309,34 +308,28 @@ def render():
         with stats[5]: _stat_card("LAGGARD", worst, "Weakest", "red")
 
         heatmap_fig = stock_heatmap(df, title)
-        # Use click events instead of Streamlit's native Plotly selection.
-        # Native selection mutates the treemap selection state on rerun and can
-        # make the clicked tile appear to expand/reflow. This component returns
-        # the clicked label without applying any selection styling to the map.
-        #
-        # The `key` also embeds a per-click generation counter. Without this,
-        # the underlying React/Plotly component never unmounts between reruns
-        # (same key = same component instance), so the browser can keep its
-        # own internal "zoomed into this tile" state even after we send back
-        # a fresh, un-zoomed figure. Bumping the key forces a clean remount.
-        gen_key = f"heatmap_click_gen_{mode}_{title}"
-        click_gen = st.session_state.get(gen_key, 0)
-        clicked_points = plotly_events(
+        # Native Streamlit chart selection (Streamlit >=1.35) instead of the
+        # third-party streamlit-plotly-events package. That package ships its
+        # own separate frontend bundle that can fail to load on Streamlit
+        # Cloud (silently breaking every click), which is what was happening
+        # here. st.plotly_chart's built-in on_select is maintained by
+        # Streamlit itself and needs no extra component to load.
+        event = st.plotly_chart(
             heatmap_fig,
-            click_event=True,
-            select_event=False,
-            hover_event=False,
-            override_height=560,
-            key=f"heatmap_chart_{mode}_{title}_{click_gen}",
+            use_container_width=True,
+            on_select="rerun",
+            selection_mode=("points",),
+            key=f"heatmap_chart_{mode}_{title}",
+            config={"displayModeBar": False},
         )
 
         selected_from_click = None
-        if clicked_points:
-            point = clicked_points[0]
+        points = (event or {}).get("selection", {}).get("points", []) if hasattr(event, "get") else []
+        if points:
+            point = points[0]
             selected_from_click = str(
                 point.get("label") or point.get("id") or point.get("text") or ""
             ).upper()
-            st.session_state[gen_key] = click_gen + 1
 
         if selected_from_click and selected_from_click in set(df["Ticker"].astype(str).str.upper()):
             st.session_state["heatmap_selected_ticker"] = selected_from_click
