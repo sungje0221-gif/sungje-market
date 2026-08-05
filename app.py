@@ -49,6 +49,13 @@ ROUTES = {
 def _load_renderer(page_name: str):
     module_name, function_name = ROUTES.get(page_name, ROUTES["Command Center"])
     module = importlib.import_module(module_name)
+    # Always reload from disk. Streamlit Cloud's "git pull -> Updated app!"
+    # deploys often keep the same Python process alive (no restart), so a
+    # plain import_module() call returns the module cached in sys.modules
+    # from whenever this process first booted -- i.e. stale code, silently,
+    # with no error. Reloading guarantees the page actually reflects the
+    # latest push without needing a manual "Reboot app" every time.
+    module = importlib.reload(module)
     return getattr(module, function_name)
 
 
