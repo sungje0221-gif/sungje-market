@@ -372,19 +372,36 @@ def schwab_portfolio():
     positions = pd.DataFrame(flatten_positions(accounts))
     summaries = pd.DataFrame(account_summary(accounts))
 
+    if positions.empty:
+        st.info("Schwab 계좌에서 포지션을 찾지 못했습니다.")
+        return
+
+    with st.spinner("종목별 섹터 · 전략 분류 중..."):
+        profiles = {t: _security_profile(t) for t in positions["Ticker"].dropna().unique()}
+    positions["Sector"] = positions["Ticker"].map(lambda t: profiles.get(t, {}).get("Sector", "Unknown"))
+    positions["Category"] = positions["Ticker"].map(lambda t: _suggest_strategy(t, profiles.get(t, {})))
+    shares_safe = positions["Shares"].replace(0, pd.NA)
+    positions["Current Price"] = (positions["Market Value"] / shares_safe).fillna(0)
+    positions["Day Change $"] = (positions["Day P/L"] / shares_safe).fillna(0)
+    positions["Weight %"] = positions["Market Value"] / positions["Market Value"].sum() * 100 if positions["Market Value"].sum() else 0
+
+    dashboard_df = positions.rename(columns={
+        "Unrealized P/L": "P/L",
+        "Unrealized P/L %": "P/L %",
+        "Day P/L %": "Day %",
+    })
+
+    total_cash = pd.to_numeric(summaries["Cash"], errors="coerce").sum() if not summaries.empty else 0.0
+    total_buying_power = pd.to_numeric(summaries["Buying Power"], errors="coerce").sum() if not summaries.empty else 0.0
+    settings = {"cash": float(total_cash), "buying_power": float(total_buying_power), "target_cash_pct": 10}
+
+    st.markdown("### All Accounts — Overview & Signals")
+    st.caption("아래 경고/제안은 규칙 기반입니다 (집중도, 현금 비중, 손실 종목 감지). Manual Portfolio와 동일한 로직을 씁니다.")
+    _portfolio_dashboard(dashboard_df, settings, realized_pl=0.0)
+
     if not summaries.empty:
-        st.markdown("### Account Summary")
-        total_value = pd.to_numeric(summaries["Liquidation Value"], errors="coerce").sum()
-        total_cash = pd.to_numeric(summaries["Cash"], errors="coerce").sum()
-        buying_power = pd.to_numeric(summaries["Buying Power"], errors="coerce").sum()
-        long_value = pd.to_numeric(summaries["Long Market Value"], errors="coerce").sum()
-
-        c = st.columns(4)
-        c[0].metric("Total Account Value", money(total_value))
-        c[1].metric("Cash", money(total_cash))
-        c[2].metric("Buying Power", money(buying_power))
-        c[3].metric("Long Market Value", money(long_value))
-
+        st.divider()
+        st.markdown("### Account Balances")
         st.dataframe(
             summaries,
             use_container_width=True,
@@ -400,56 +417,38 @@ def schwab_portfolio():
             },
         )
 
-    if positions.empty:
-        st.info("Schwab 계좌에서 포지션을 찾지 못했습니다.")
-        return
-
-    total_mv = positions["Market Value"].sum()
-    total_cost = positions["Cost Basis"].sum()
-    total_pl = positions["Unrealized P/L"].sum()
-    total_day_pl = positions["Day P/L"].sum()
-    total_return = (total_mv / total_cost - 1) * 100 if total_cost else 0
-
-    st.markdown("### Live Positions")
-    c = st.columns(4)
-    c[0].metric("Position Value", money(total_mv))
-    c[1].metric("Unrealized P/L", money(total_pl), f"{total_return:+.2f}%")
-    c[2].metric("Today's P/L", money(total_day_pl))
-    c[3].metric("Positions", len(positions))
-
-    live_display = positions[
-        ["Account", "Ticker", "Description", "Shares", "Avg Cost",
-         "Market Value", "Unrealized P/L", "Unrealized P/L %",
-         "Day P/L", "Day P/L %"]
-    ].copy()
-    live_style = style_signed_columns(
-        live_display,
-        ["Unrealized P/L", "Unrealized P/L %", "Day P/L", "Day P/L %"],
-    )
-    st.dataframe(
-        live_style,
-        use_container_width=True,
-        hide_index=True,
-        column_config={
-            "Shares": st.column_config.NumberColumn(format="%.4f"),
-            "Avg Cost": st.column_config.NumberColumn(format="$%.2f"),
-            "Market Value": st.column_config.NumberColumn(format="$%.2f"),
-            "Unrealized P/L": st.column_config.NumberColumn(format="$%.2f"),
-            "Unrealized P/L %": st.column_config.NumberColumn(format="%+.2f%%"),
-            "Day P/L": st.column_config.NumberColumn(format="$%.2f"),
-            "Day P/L %": st.column_config.NumberColumn(format="%+.2f%%"),
-        },
-    )
-
-    concentration = positions.groupby("Ticker", as_index=False)["Market Value"].sum()
-    concentration["Weight %"] = concentration["Market Value"] / concentration["Market Value"].sum() * 100
-    concentration = concentration.sort_values("Weight %", ascending=False)
-    st.markdown("### Concentration")
-    st.bar_chart(concentration.set_index("Ticker")["Weight %"])
-
-    largest = concentration.iloc[0]
-    if largest["Weight %"] > 25:
-        st.warning(f'{largest["Ticker"]} 비중이 {largest["Weight %"]:.1f}%로 높습니다.')
+    st.divider()
+    st.markdown("### Positions by Account")
+    position_cols = [
+        "Ticker", "Description", "Shares", "Avg Cost", "Current Price",
+        "Market Value", "Weight %", "Unrealized P/L", "Unrealized P/L %",
+        "Day Change $", "Day P/L %", "Sector", "Category",
+    ]
+    for account_number in sorted(positions["Account"].dropna().unique()):
+        sub = positions[positions["Account"] == account_number].copy()
+        sub["Weight %"] = sub["Market Value"] / sub["Market Value"].sum() * 100 if sub["Market Value"].sum() else 0
+        header = f"Account {account_number}  ·  {money(sub['Market Value'].sum())}  ·  {len(sub)} positions"
+        with st.expander(header, expanded=True):
+            sub_display = sub[position_cols].sort_values("Weight %", ascending=False)
+            sub_style = style_signed_columns(
+                sub_display, ["Unrealized P/L", "Unrealized P/L %", "Day Change $", "Day P/L %"]
+            )
+            st.dataframe(
+                sub_style,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Shares": st.column_config.NumberColumn(format="%.4f"),
+                    "Avg Cost": st.column_config.NumberColumn(format="$%.2f"),
+                    "Current Price": st.column_config.NumberColumn(format="$%.2f"),
+                    "Market Value": st.column_config.NumberColumn(format="$%.2f"),
+                    "Weight %": st.column_config.NumberColumn(format="%.1f%%"),
+                    "Unrealized P/L": st.column_config.NumberColumn(format="$%.2f"),
+                    "Unrealized P/L %": st.column_config.NumberColumn(format="%+.2f%%"),
+                    "Day Change $": st.column_config.NumberColumn("Day Change $", format="%+.2f"),
+                    "Day P/L %": st.column_config.NumberColumn("Day %", format="%+.2f%%"),
+                },
+            )
 
 
 @st.cache_data(ttl=86400, show_spinner=False)
