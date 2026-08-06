@@ -9,7 +9,8 @@ from engine.analysis import analyze
 from engine.indicators import rsi_series, trend_score
 from engine.market_data import batch_history, batch_quotes, history, intraday_history, quote
 from utils.formatters import money, pct
-from utils.watchlist_store import load_watchlist_data
+from utils.watchlist_store import load_watchlist_data, load_watchlist, save_watchlist
+from pages.heatmap import GROUPS as _DISCOVERY_GROUPS
 
 FALLBACK = ["QQQM", "SMH", "GOOGL", "SKHY", "KORU", "JPM", "HOOD", "RKLB"]
 
@@ -178,6 +179,32 @@ def _detail(ticker: str) -> None:
     st.markdown(f'<div class="panel"><b>{a.get("action", "WAIT")}</b><br>Support {money(a.get("support"))} · Resistance {money(a.get("resistance"))}</div>', unsafe_allow_html=True)
 
 
+@st.cache_data(ttl=300, show_spinner=False)
+def _discover(watchlist_tickers: tuple[str, ...], limit: int = 6) -> pd.DataFrame:
+    """Strong-signal tickers from a broad universe, excluding ones already watched."""
+    universe = []
+    seen = set(watchlist_tickers)
+    for group in _DISCOVERY_GROUPS.values():
+        for t in group:
+            if t not in seen:
+                seen.add(t)
+                universe.append(t)
+    if not universe:
+        return pd.DataFrame()
+    scanned = _radar(tuple(universe))
+    strong = scanned[scanned["Signal"].isin(["BUY"])].sort_values("Score", ascending=False)
+    return strong.head(limit)
+
+
+def _add_to_watchlist(ticker: str) -> None:
+    current = load_watchlist([])
+    if ticker.upper() not in {t.upper() for t in current}:
+        save_watchlist(current + [ticker.upper()])
+        st.toast(f"{ticker} Watchlist에 추가됨")
+    else:
+        st.toast(f"{ticker}는 이미 Watchlist에 있습니다")
+
+
 def render() -> None:
     st.title("AI Center")
     st.caption("실제 My Watchlist와 연동되며, 카드 클릭 시 상세 분석을 표시합니다.")
@@ -204,8 +231,37 @@ def render() -> None:
             styled = signals.style.map(lambda v: "color:#45a3ff;font-weight:800" if isinstance(v,(int,float)) and v>0 else "color:#ff5b6e;font-weight:800" if isinstance(v,(int,float)) and v<0 else "", subset=["Daily %"])
             st.dataframe(styled, use_container_width=True, hide_index=True, height=360)
 
+        st.divider()
+        st.markdown("### Discover — Watchlist 밖 주목할 종목")
+        st.caption("현재 Watchlist에 없는 종목 중, 같은 규칙 기반 신호가 BUY로 나오는 종목입니다.")
+        with st.spinner("종목 스캔 중..."):
+            picks = _discover(tuple(tickers))
+        if picks.empty:
+            st.info("지금은 Watchlist 밖에서 뚜렷한 BUY 신호가 나온 종목이 없습니다.")
+        else:
+            dcols = st.columns(3)
+            for i, (_, row) in enumerate(picks.iterrows()):
+                with dcols[i % 3]:
+                    st.markdown(f'<div class="compact-stock-card"><div><b>{row["Ticker"]}</b><span>{row["Signal"]}</span></div><strong>{money(row["Price"])}</strong><small>{_signed(row.get("Daily %"))} · Score {row["Score"]}</small><p>{row["Reason"]}</p></div>', unsafe_allow_html=True)
+                    b1, b2 = st.columns(2)
+                    if b1.button("Details", key=f'disc_detail_{row["Ticker"]}', use_container_width=True):
+                        st.session_state["ai_selected_ticker"] = row["Ticker"]
+                        st.rerun()
+                    if b2.button("+ Watch", key=f'disc_add_{row["Ticker"]}', use_container_width=True):
+                        _add_to_watchlist(row["Ticker"])
+                        st.rerun()
+
     with analyze_tab:
-        ticker = st.text_input("Ticker", "NVDA", key="ai_analyze_ticker").upper().strip()
+        if "ai_analyze_ticker" not in st.session_state:
+            st.session_state["ai_analyze_ticker"] = "NVDA"
+        quick_tickers = list(dict.fromkeys(list(tickers) + (list(picks["Ticker"]) if not picks.empty else [])))
+        if quick_tickers:
+            st.caption("빠른 선택")
+            qcols = st.columns(min(8, len(quick_tickers)) or 1)
+            for i, t in enumerate(quick_tickers[:16]):
+                if qcols[i % len(qcols)].button(t, key=f"quick_analyze_{t}", use_container_width=True):
+                    st.session_state["ai_analyze_ticker"] = t
+        ticker = st.text_input("Ticker", key="ai_analyze_ticker").upper().strip()
         if ticker: _detail(ticker)
 
     with compare_tab:
