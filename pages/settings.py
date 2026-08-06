@@ -26,7 +26,7 @@ DEFAULT = {
 def _backup_zip() -> bytes:
     memory = io.BytesIO()
     with zipfile.ZipFile(memory, "w", zipfile.ZIP_DEFLATED) as archive:
-        for name in ["portfolio.csv", "watchlist.json", "journal.csv", "settings.json"]:
+        for name in ["portfolio.csv", "watchlist.json", "journal.json", "settings.json"]:
             path = DATA_DIR / name
             if path.exists():
                 archive.write(path, arcname=f"data/{name}")
@@ -34,14 +34,20 @@ def _backup_zip() -> bytes:
 
 
 def _diagnostics() -> pd.DataFrame:
+    from utils.storage import cloud_configured
     checks = []
     for label, path in [
         ("Portfolio file", DATA_DIR / "portfolio.csv"),
         ("Watchlist file", DATA_DIR / "watchlist.json"),
-        ("Journal file", DATA_DIR / "journal.csv"),
+        ("Journal file", DATA_DIR / "journal.json"),
         ("Settings file", DATA_DIR / "settings.json"),
     ]:
         checks.append({"Check": label, "Status": "OK" if path.exists() else "MISSING", "Detail": str(path.name)})
+    checks.append({
+        "Check": "Cloud Sync (Supabase)",
+        "Status": "OK" if cloud_configured() else "NOT SET",
+        "Detail": "Watchlist/Portfolio/Journal survive restarts" if cloud_configured() else "로컬 파일만 사용 — 재부팅 시 소실 위험",
+    })
     checks.extend([
         {"Check": "Python", "Status": "OK", "Detail": sys.version.split()[0]},
         {"Check": "Platform", "Status": "OK", "Detail": platform.system()},

@@ -8,7 +8,7 @@ from components.charts import advanced_chart, market_breadth_bar, performance_ma
 from components.colored_tables import style_signed_columns
 from engine.fundamentals import ticker_info
 from engine.market_data import batch_quotes, history, intraday_history, quote
-from utils.storage import load_json
+from utils.watchlist_store import load_watchlist, save_watchlist
 
 GROUPS = {
     "S&P 500 Leaders": ["NVDA","MSFT","AAPL","AMZN","GOOGL","META","AVGO","BRK-B","JPM","LLY","V","XOM","WMT","MA","COST","JNJ","NFLX","HD","PG","ORCL","ABBV","BAC","KO","CRM","CVX","PM","IBM","GE","CAT","UNH"],
@@ -235,15 +235,9 @@ def _render_ticker_detail(ticker: str):
         st.link_button("Yahoo Finance", f"https://finance.yahoo.com/quote/{ticker}", use_container_width=True)
         st.link_button("TradingView", f"https://www.tradingview.com/symbols/{ticker.replace('-', '')}/", use_container_width=True)
         if st.button("☆ Watchlist에 추가", key=f"heat_add_{ticker}", use_container_width=True):
-            current = load_json("watchlist.json", [])
-            normalized = []
-            for item in current:
-                normalized.append(item if isinstance(item, dict) else str(item).upper())
-            existing = {str(item.get("ticker", "")).upper() if isinstance(item, dict) else str(item).upper() for item in normalized}
-            if ticker.upper() not in existing:
-                normalized.append(ticker.upper())
-                from utils.storage import save_json
-                save_json("watchlist.json", normalized)
+            current = load_watchlist([])
+            if ticker.upper() not in {t.upper() for t in current}:
+                save_watchlist(current + [ticker.upper()])
                 st.success(f"{ticker}를 Watchlist에 추가했습니다.")
             else:
                 st.info(f"{ticker}는 이미 Watchlist에 있습니다.")
@@ -291,7 +285,7 @@ def render():
                 df = build_rows(tuple(SECTOR_GROUPS[selected]), selected)
                 title = selected
             else:
-                tickers = load_json("watchlist.json", [])
+                tickers = load_watchlist([])
                 if not tickers:
                     st.info("Watchlist에 종목을 먼저 추가하세요.")
                     return

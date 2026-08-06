@@ -11,7 +11,7 @@ from engine.analysis import market_brief
 from engine.indicators import trend_score
 from engine.market_data import batch_history, batch_quotes, korea_quotes_naver
 from utils.formatters import money, pct
-from utils.storage import load_json
+from utils.watchlist_store import load_watchlist_data
 
 WATCH_FALLBACK = ["VOO", "QQQM", "GOOGL", "SKHY", "KORU", "SMH", "JPM", "AVGO", "NVDA", "AMZN", "META", "HOOD"]
 
@@ -64,7 +64,7 @@ def _fmt_price(label: str, price: float | None) -> str:
 
 
 def _watchlist_tickers(limit: int = 12) -> list[str]:
-    raw = load_json("watchlist.json", [])
+    raw = load_watchlist_data(WATCH_FALLBACK)
     tickers: list[str] = []
     for item in raw:
         ticker = item.get("ticker") if isinstance(item, dict) else item

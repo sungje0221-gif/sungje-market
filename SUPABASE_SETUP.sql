@@ -54,6 +54,22 @@ create policy "schwab_tokens insert" on public.schwab_tokens for insert with che
 create policy "schwab_tokens update" on public.schwab_tokens for update using (true) with check (true);
 create policy "schwab_tokens delete" on public.schwab_tokens for delete using (true);
 
+-- Generic JSON blob storage for anything else that was only living in the
+-- ephemeral local filesystem (starting with the trading journal). One row
+-- per (profile_id, key); payload holds the whole dataset as jsonb.
+create table if not exists public.app_blobs (
+  profile_id text not null,
+  key text not null,
+  payload jsonb not null,
+  updated_at timestamptz not null default now(),
+  primary key (profile_id, key)
+);
+alter table public.app_blobs enable row level security;
+create policy "app_blobs read" on public.app_blobs for select using (true);
+create policy "app_blobs insert" on public.app_blobs for insert with check (true);
+create policy "app_blobs update" on public.app_blobs for update using (true) with check (true);
+create policy "app_blobs delete" on public.app_blobs for delete using (true);
+
 create table if not exists public.portfolio_settings (
   profile_id text primary key,
   cash numeric not null default 0,
