@@ -39,6 +39,21 @@ create policy "portfolio delete" on public.portfolio_positions for delete using 
 alter table public.portfolio_positions add column if not exists sector text not null default 'Unknown';
 alter table public.portfolio_positions add column if not exists industry text not null default 'Unknown';
 
+-- Schwab OAuth token storage. Local files don't survive a Streamlit Cloud
+-- container restart, so the connection token lives here instead -- one row
+-- per profile_id, holding the whole token payload (access/refresh token,
+-- expiry, etc.) as jsonb.
+create table if not exists public.schwab_tokens (
+  profile_id text primary key,
+  token jsonb not null,
+  updated_at timestamptz not null default now()
+);
+alter table public.schwab_tokens enable row level security;
+create policy "schwab_tokens read" on public.schwab_tokens for select using (true);
+create policy "schwab_tokens insert" on public.schwab_tokens for insert with check (true);
+create policy "schwab_tokens update" on public.schwab_tokens for update using (true) with check (true);
+create policy "schwab_tokens delete" on public.schwab_tokens for delete using (true);
+
 create table if not exists public.portfolio_settings (
   profile_id text primary key,
   cash numeric not null default 0,
