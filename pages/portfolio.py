@@ -449,9 +449,9 @@ def schwab_portfolio():
     st.divider()
     st.markdown("### Positions by Account")
     position_cols = [
-        "Ticker", "Description", "Shares", "Avg Cost", "Current Price",
-        "Market Value", "Weight %", "Unrealized P/L", "Unrealized P/L %",
-        "Day Change $", "Day %", "Sector", "Category",
+        "Ticker", "Shares", "Current Price", "Day %", "Day Change $", "Weight %",
+        "Description", "Avg Cost", "Market Value", "Unrealized P/L", "Unrealized P/L %",
+        "Sector", "Category",
     ]
     for account_number in sorted(positions["Account"].dropna().unique()):
         sub = positions[positions["Account"] == account_number].copy()
