@@ -99,7 +99,7 @@ def render() -> None:
             st.divider(); st.subheader(f"{selected} · Detail")
             _detail(selected)
         with st.expander("Full watchlist signal table"):
-            styled = signals.style.applymap(lambda v: "color:#45a3ff;font-weight:800" if isinstance(v,(int,float)) and v>0 else "color:#ff5b6e;font-weight:800" if isinstance(v,(int,float)) and v<0 else "", subset=["Daily %"])
+            styled = signals.style.map(lambda v: "color:#45a3ff;font-weight:800" if isinstance(v,(int,float)) and v>0 else "color:#ff5b6e;font-weight:800" if isinstance(v,(int,float)) and v<0 else "", subset=["Daily %"])
             st.dataframe(styled, use_container_width=True, hide_index=True, height=360)
 
     with analyze_tab:
