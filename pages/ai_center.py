@@ -11,6 +11,7 @@ from engine.market_data import batch_history, batch_quotes, history, intraday_hi
 from utils.formatters import money, pct
 from utils.watchlist_store import load_watchlist_data, load_watchlist, save_watchlist
 from pages.heatmap import GROUPS as _DISCOVERY_GROUPS
+from pages.news import news as fetch_news
 
 FALLBACK = ["QQQM", "SMH", "GOOGL", "SKHY", "KORU", "JPM", "HOOD", "RKLB"]
 
@@ -177,6 +178,24 @@ def _detail(ticker: str) -> None:
         st.warning(f"{ticker}의 {range_label} / {interval} 데이터가 없습니다. 다른 봉을 선택하세요.")
 
     st.markdown(f'<div class="panel"><b>{a.get("action", "WAIT")}</b><br>Support {money(a.get("support"))} · Resistance {money(a.get("resistance"))}</div>', unsafe_allow_html=True)
+
+    st.markdown("#### Related News")
+    items, source, error = fetch_news(ticker)
+    st.caption(f"Source: {source} · cached for 15 minutes")
+    if not items:
+        st.caption("지금은 관련 뉴스를 가져오지 못했습니다.")
+        if error:
+            with st.expander("Technical details"):
+                st.code(error)
+    else:
+        for item in items[:6]:
+            st.markdown(f"**{item['title']}**")
+            st.caption(item.get("provider") or "Unknown")
+            if item.get("summary"):
+                st.write(item["summary"][:400])
+            if item.get("url"):
+                st.link_button("Open article", item["url"], key=f"news_link_{ticker}_{item['title'][:40]}")
+            st.divider()
 
 
 @st.cache_data(ttl=300, show_spinner=False)

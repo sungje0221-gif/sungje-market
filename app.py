@@ -45,7 +45,6 @@ ROUTES = {
     "Buy Planner": ("pages.buy_planner", "render"),
     "AI Center": ("pages.ai_center", "render"),
     "Earnings": ("pages.earnings", "render"),
-    "News": ("pages.news", "render"),
     "Journal": ("pages.journal", "render"),
     "Schwab": ("pages.schwab_connect", "render"),
     "Settings": ("pages.settings", "render"),

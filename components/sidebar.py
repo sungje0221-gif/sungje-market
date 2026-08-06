@@ -7,14 +7,14 @@ NAV_GROUPS = {
     "HOME": ["Command Center"],
     "MARKETS": ["Heatmap", "Watchlist"],
     "PORTFOLIO": ["Portfolio", "Buy Planner"],
-    "INTELLIGENCE": ["AI Center", "Earnings", "News"],
+    "INTELLIGENCE": ["AI Center", "Earnings"],
     "SYSTEM": ["Schwab", "Journal", "Settings"],
 }
 
 NAV_ICONS = {
     "Command Center": "⌂", "Heatmap": "▦", "Watchlist": "☆",
     "Portfolio": "◉", "Buy Planner": "＋", "AI Center": "✦", "Earnings": "◷",
-    "News": "≡", "Schwab": "🏦", "Journal": "✎", "Settings": "⚙",
+    "Schwab": "🏦", "Journal": "✎", "Settings": "⚙",
 }
 
 
