@@ -8,6 +8,7 @@ import streamlit as st
 import yfinance as yf
 
 from engine.portfolio import enrich
+from engine.market_data import batch_quotes
 from engine.schwab import (
     SchwabError,
     account_summary,
@@ -380,15 +381,43 @@ def schwab_portfolio():
         profiles = {t: _security_profile(t) for t in positions["Ticker"].dropna().unique()}
     positions["Sector"] = positions["Ticker"].map(lambda t: profiles.get(t, {}).get("Sector", "Unknown"))
     positions["Category"] = positions["Ticker"].map(lambda t: _suggest_strategy(t, profiles.get(t, {})))
+
     shares_safe = positions["Shares"].replace(0, pd.NA)
-    positions["Current Price"] = (positions["Market Value"] / shares_safe).fillna(0)
-    positions["Day Change $"] = (positions["Day P/L"] / shares_safe).fillna(0)
+    # Schwab's own positions endpoint (currentDayProfitLoss / -Percentage) is
+    # unreliable for options and for any lot traded earlier the same day, and
+    # can show wildly wrong day-change numbers as a result. Live quotes (the
+    # same source Heatmap/Watchlist already use successfully) are trustworthy
+    # for regular equities/ETFs, so prefer those and only fall back to
+    # Schwab's own math for tickers a normal quote lookup can't resolve
+    # (mainly option contracts).
+    equity_tickers = tuple(
+        t for t in positions["Ticker"].dropna().unique()
+        if " " not in str(t) and str(t).isascii()
+    )
+    quotes = batch_quotes(equity_tickers) if equity_tickers else {}
+
+    def _current_price(row):
+        q = quotes.get(row["Ticker"], {})
+        return q.get("price") if q.get("price") is not None else (row["Market Value"] / row["Shares"] if row["Shares"] else 0)
+
+    def _day_pct(row):
+        q = quotes.get(row["Ticker"], {})
+        return q.get("change_pct") if q.get("change_pct") is not None else row["Day P/L %"]
+
+    def _day_change_dollar(row):
+        q = quotes.get(row["Ticker"], {})
+        if q.get("change_abs") is not None:
+            return q["change_abs"]
+        return row["Day P/L"] / row["Shares"] if row["Shares"] else 0
+
+    positions["Current Price"] = positions.apply(_current_price, axis=1)
+    positions["Day %"] = positions.apply(_day_pct, axis=1)
+    positions["Day Change $"] = positions.apply(_day_change_dollar, axis=1)
     positions["Weight %"] = positions["Market Value"] / positions["Market Value"].sum() * 100 if positions["Market Value"].sum() else 0
 
     dashboard_df = positions.rename(columns={
         "Unrealized P/L": "P/L",
         "Unrealized P/L %": "P/L %",
-        "Day P/L %": "Day %",
     })
 
     total_cash = pd.to_numeric(summaries["Cash"], errors="coerce").sum() if not summaries.empty else 0.0
@@ -422,7 +451,7 @@ def schwab_portfolio():
     position_cols = [
         "Ticker", "Description", "Shares", "Avg Cost", "Current Price",
         "Market Value", "Weight %", "Unrealized P/L", "Unrealized P/L %",
-        "Day Change $", "Day P/L %", "Sector", "Category",
+        "Day Change $", "Day %", "Sector", "Category",
     ]
     for account_number in sorted(positions["Account"].dropna().unique()):
         sub = positions[positions["Account"] == account_number].copy()
@@ -431,7 +460,7 @@ def schwab_portfolio():
         with st.expander(header, expanded=True):
             sub_display = sub[position_cols].sort_values("Weight %", ascending=False)
             sub_style = style_signed_columns(
-                sub_display, ["Unrealized P/L", "Unrealized P/L %", "Day Change $", "Day P/L %"]
+                sub_display, ["Unrealized P/L", "Unrealized P/L %", "Day Change $", "Day %"]
             )
             st.dataframe(
                 sub_style,
@@ -446,7 +475,7 @@ def schwab_portfolio():
                     "Unrealized P/L": st.column_config.NumberColumn(format="$%.2f"),
                     "Unrealized P/L %": st.column_config.NumberColumn(format="%+.2f%%"),
                     "Day Change $": st.column_config.NumberColumn("Day Change $", format="%+.2f"),
-                    "Day P/L %": st.column_config.NumberColumn("Day %", format="%+.2f%%"),
+                    "Day %": st.column_config.NumberColumn("Day %", format="%+.2f%%"),
                 },
             )
 

@@ -23,9 +23,15 @@ inject_v098()
 inject_v301()
 inject_v309()
 
-# Deep links from a watchlist card should reopen the Watchlist page.
+# Deep links from a watchlist card should reopen the Watchlist page --
+# but only once. Leaving `?watch=` in the URL after handling it meant every
+# later rerun re-forced os_page back to "Watchlist" regardless of which nav
+# button was actually clicked, so navigation away from Watchlist looked
+# broken after visiting any ticker's card even once.
 if st.query_params.get("watch"):
     st.session_state["os_page"] = "Watchlist"
+    st.session_state["watch_selected"] = st.query_params.get("watch")
+    st.query_params.clear()
 
 page = render_sidebar()
 
