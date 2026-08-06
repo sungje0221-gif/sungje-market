@@ -663,6 +663,29 @@ def _portfolio_dashboard(e: pd.DataFrame, settings: dict, realized_pl: float = 0
         for _,r in weak.head(3).iterrows(): attention.append(("warning",f"{r['Ticker']} 누적 손실 {r['P/L %']:.1f}%"))
         if not attention: attention=[("success","현재 즉시 경고할 집중도·현금·손실 항목이 없습니다.")]
         for kind,text in attention: getattr(st,kind)(text)
+
+        from engine.claude_advisor import configured as _ai_configured, ask as _ai_ask
+        if _ai_configured():
+            attn_key = "|".join(t for _, t in attention)
+            if st.button("🤖 AI 리밸런싱 조언", key="ai_rebalance_btn"):
+                top_holdings = e.nlargest(8, "Weight %")[["Ticker", "Weight %", "P/L %"]] if "Weight %" in e and "P/L %" in e else pd.DataFrame()
+                holdings_text = "\n".join(
+                    f"- {r['Ticker']}: 비중 {r['Weight %']:.1f}%, 손익 {r['P/L %']:+.1f}%"
+                    for _, r in top_holdings.iterrows()
+                ) if not top_holdings.empty else "보유 종목 정보 없음"
+                attention_text = "\n".join(f"- {t}" for _, t in attention)
+                system = (
+                    "너는 개인 투자 대시보드에 내장된 한국어 포트폴리오 리밸런싱 어시스턴트다. "
+                    "제공된 규칙 기반 경고와 보유 비중만 근거로, 실제로 어떤 순서로 무엇부터 조정하면 좋을지 "
+                    "3~5개의 구체적이고 실행 가능한 제안을 우선순위 순으로 작성해라. "
+                    "확정적 지시가 아니라 근거와 함께 제안하는 톤을 유지해라."
+                )
+                user = f"규칙 기반 경고:\n{attention_text}\n\n비중 상위 보유종목:\n{holdings_text}\n\n리밸런싱 조언을 작성해줘."
+                with st.spinner("AI 조언 생성 중..."):
+                    st.session_state["ai_rebalance_text"] = _ai_ask(system, user, max_tokens=700)
+                    st.session_state["ai_rebalance_key"] = attn_key
+            if st.session_state.get("ai_rebalance_text"):
+                st.markdown(f'<div class="panel">{st.session_state["ai_rebalance_text"]}</div>', unsafe_allow_html=True)
     with right:
         st.markdown("### Target vs Current")
         comp=pd.DataFrame({"Allocation":["Invested","Cash"],"Current %":[100-cash_pct,cash_pct],"Target %":[100-target_cash,target_cash]})

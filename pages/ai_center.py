@@ -197,6 +197,29 @@ def _detail(ticker: str) -> None:
                 st.link_button("Open article", item["url"], key=f"news_link_{ticker}_{item['title'][:40]}")
             st.divider()
 
+    st.markdown("#### AI Commentary")
+    from engine.claude_advisor import configured, ask
+    if not configured():
+        st.info("Anthropic API 키가 설정되지 않아 AI 코멘터리를 쓸 수 없습니다.")
+    else:
+        if st.button("AI 코멘터리 생성", key=f"ai_comment_btn_{ticker}"):
+            headlines = "\n".join(f"- {item['title']}" for item in items[:5]) if items else "관련 뉴스 없음"
+            narrative_text = "\n".join(_narrative(ticker, a))
+            system = (
+                "너는 개인 투자 대시보드에 내장된 한국어 종목 분석 어시스턴트다. "
+                "제공된 규칙 기반 지표와 최근 뉴스 헤드라인만 근거로 삼아, 왜 이런 신호가 나왔는지, "
+                "지금 이 종목에서 조심할 점은 뭔지 3~5문장으로 설명해라. 확정적 매수/매도 지시는 피하고, "
+                "뉴스 헤드라인만 있고 본문은 없으니 과도하게 단정하지 마라."
+            )
+            user = (
+                f"종목: {ticker}\n점수: {a.get('score')}/100, 액션: {a.get('action')}, 리스크: {a.get('risk')}\n"
+                f"지표 요약:\n{narrative_text}\n\n최근 뉴스 헤드라인:\n{headlines}\n\n코멘터리를 작성해줘."
+            )
+            with st.spinner("AI 코멘터리 생성 중..."):
+                st.session_state[f"ai_comment_{ticker}"] = ask(system, user, max_tokens=600)
+        if st.session_state.get(f"ai_comment_{ticker}"):
+            st.markdown(f'<div class="panel">{st.session_state[f"ai_comment_{ticker}"]}</div>', unsafe_allow_html=True)
+
 
 @st.cache_data(ttl=300, show_spinner=False)
 def _discover(watchlist_tickers: tuple[str, ...], limit: int = 6) -> pd.DataFrame:

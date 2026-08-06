@@ -62,11 +62,15 @@ def render() -> None:
 
     status = connection_status()
     st.markdown("### Data Source Diagnostics")
-    c1, c2, c3 = st.columns(3)
+    c1, c2, c3, c4 = st.columns(4)
     c1.metric("Schwab Credentials", "READY" if status["configured"] else "NOT SET")
     c2.metric("Schwab Account", "CONNECTED" if status["connected"] else "DISCONNECTED")
     c3.metric("Quote Priority", "Schwab → Yahoo" if status["connected"] else "Yahoo Finance")
+    from engine.claude_advisor import configured as _ai_ready
+    c4.metric("AI Advisor", "READY" if _ai_ready() else "NOT SET")
     st.caption("Schwab 연결 전에는 Yahoo Finance가 기본 가격 공급원입니다. 시세는 지연될 수 있습니다.")
+    if not _ai_ready():
+        st.caption("AI 브리핑/코멘터리/채팅을 쓰려면 Streamlit Secrets에 [anthropic] api_key를 추가하세요.")
 
     x = load_json("settings.json", DEFAULT)
     st.markdown("### Personal Preferences")

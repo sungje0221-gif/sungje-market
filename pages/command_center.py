@@ -172,6 +172,101 @@ def _group_panel(title: str, subtitle: str, items: dict[str, str], quotes: dict[
     """
 
 
+def _ai_briefing_section(state: str, market_score: float, watch_items: list) -> None:
+    from engine.claude_advisor import configured, ask
+
+    st.markdown('<div class="section-heading"><div><span>AI ADVISOR</span><h3>오늘의 AI 브리핑</h3></div></div>', unsafe_allow_html=True)
+    if not configured():
+        st.info("Anthropic API 키가 설정되지 않아 AI 브리핑을 쓸 수 없습니다. Settings에서 안내를 확인하세요.")
+        return
+
+    top_movers = sorted(watch_items, key=lambda x: abs(float(x[2].get("change_pct") or 0)), reverse=True)[:6]
+    movers_text = "\n".join(
+        f"- {ticker}: {data.get('change_pct', 0):+.2f}%, 추세점수 {score:.0f}/100"
+        for ticker, score, data in top_movers
+    )
+    cache_key = f"{state}|{market_score:.0f}|{movers_text}"
+
+    if st.session_state.get("briefing_cache_key") != cache_key or "briefing_text" not in st.session_state:
+        auto_generate = st.session_state.get("briefing_text") is None
+    else:
+        auto_generate = False
+
+    col_gen, col_note = st.columns([1, 4])
+    force = col_gen.button("🔄 다시 생성", key="regen_briefing")
+    if force or auto_generate:
+        with st.spinner("AI 브리핑 생성 중..."):
+            system = (
+                "너는 개인 투자자를 위한 한국어 시장 브리핑 어시스턴트다. "
+                "제공된 시장 데이터와 Watchlist 등락만 근거로, 과장 없이 짧고 실용적으로 "
+                "'오늘 신경 쓸 것' 3~5개를 불릿으로 작성해라. 투자 조언이 아니라 참고용 정보 정리임을 유지하고, "
+                "확실하지 않은 건 단정하지 말 것."
+            )
+            user = f"시장 국면: {state}\n추세 점수: {market_score:.0f}/100\n\nWatchlist 주요 변동:\n{movers_text}\n\n오늘 아침 브리핑을 작성해줘."
+            st.session_state["briefing_text"] = ask(system, user, max_tokens=700)
+            st.session_state["briefing_cache_key"] = cache_key
+
+    if st.session_state.get("briefing_text"):
+        st.markdown(f'<div class="panel">{st.session_state["briefing_text"]}</div>', unsafe_allow_html=True)
+    col_note.caption("1시간 캐시 · 규칙 기반 지표만 근거로 사용 · 투자 조언 아님")
+
+
+def _portfolio_context_text() -> str:
+    """Best-effort summary of live Schwab positions for the chat's system prompt."""
+    try:
+        from engine.schwab import connection_status, accounts_with_positions, flatten_positions
+        status = connection_status()
+        if not status.get("connected"):
+            return "Schwab 미연결 상태 — 실시간 계좌 데이터 없음."
+        positions = flatten_positions(accounts_with_positions())
+        if not positions:
+            return "Schwab 연결됨, 보유 포지션 없음."
+        total = sum(p.get("Market Value") or 0 for p in positions) or 1
+        lines = [
+            f"- {p['Ticker']}: {p.get('Market Value', 0) / total * 100:.1f}% 비중, "
+            f"미실현손익 {p.get('Unrealized P/L %', 0):+.1f}%"
+            for p in sorted(positions, key=lambda p: p.get("Market Value") or 0, reverse=True)[:15]
+        ]
+        return "현재 Schwab 보유 종목 (비중 상위):\n" + "\n".join(lines)
+    except Exception:
+        return "계좌 데이터를 불러오지 못했습니다."
+
+
+def _ai_chat_section() -> None:
+    from engine.claude_advisor import configured, chat
+
+    st.markdown('<div class="section-heading"><div><span>AI ADVISOR</span><h3>무엇이든 물어보세요</h3></div></div>', unsafe_allow_html=True)
+    if not configured():
+        st.info("Anthropic API 키가 설정되지 않아 채팅을 쓸 수 없습니다.")
+        return
+
+    if "cc_chat_history" not in st.session_state:
+        st.session_state["cc_chat_history"] = []
+
+    for msg in st.session_state["cc_chat_history"]:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+
+    prompt = st.chat_input("예: SPGI 비중 줄여야 할까?")
+    if prompt:
+        st.session_state["cc_chat_history"].append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+        portfolio_context = _portfolio_context_text()
+        system = (
+            "너는 이 개인 투자 대시보드 안에 내장된 한국어 투자 보조 어시스턴트다. "
+            "아래는 사용자의 실제 계좌 데이터다 (매 질문마다 앱이 최신 상태로 자동 전달함):\n\n"
+            f"{portfolio_context}\n\n"
+            "이 데이터를 근거로 명확하고 실용적으로 답하되, 확정적인 매수/매도 지시보다는 "
+            "근거·장단점·확인할 지표를 제시하는 방식으로 답해라. 데이터에 없는 내용은 모른다고 말해라."
+        )
+        with st.chat_message("assistant"):
+            with st.spinner("생각 중..."):
+                reply = chat(system, st.session_state["cc_chat_history"], max_tokens=800)
+            st.markdown(reply)
+        st.session_state["cc_chat_history"].append({"role": "assistant", "content": reply})
+
+
 def render() -> None:
     now = datetime.now(ZoneInfo("America/Los_Angeles"))
     watch_tickers = _watchlist_tickers(12)
@@ -286,3 +381,8 @@ def render() -> None:
         """,
         unsafe_allow_html=True,
     )
+
+    st.divider()
+    _ai_briefing_section(state, market_score, watch_items)
+    st.divider()
+    _ai_chat_section()
