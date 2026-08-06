@@ -8,7 +8,9 @@ import streamlit as st
 import yfinance as yf
 
 from engine.portfolio import enrich
-from engine.market_data import batch_quotes
+from engine.market_data import batch_quotes, history, intraday_history, quote
+from engine.fundamentals import ticker_info
+from components.charts import advanced_chart
 from engine.schwab import (
     SchwabError,
     account_summary,
@@ -343,6 +345,69 @@ def transactions_page():
             st.rerun()
 
 
+POSITION_CHART_RANGES = {"1D": "1d", "5D": "5d", "1M": "1mo", "3M": "3mo", "6M": "6mo", "1Y": "1y", "5Y": "5y"}
+POSITION_CANDLES_BY_RANGE = {
+    "1D": ["1m", "2m", "5m", "15m", "30m", "60m", "1d"],
+    "5D": ["1m", "2m", "5m", "15m", "30m", "60m", "1d"],
+    "1M": ["5m", "15m", "30m", "60m", "1d"],
+    "3M": ["60m", "1d"],
+    "6M": ["1d"],
+    "1Y": ["1d"],
+    "5Y": ["1d"],
+}
+POSITION_DEFAULT_CANDLE = {"1D": "1m", "5D": "5m", "1M": "60m", "3M": "1d", "6M": "1d", "1Y": "1d", "5Y": "1d"}
+
+
+def _position_detail(ticker: str, row: pd.Series) -> None:
+    """Same chart pattern as Heatmap/Earnings/AI Center, plus this account's actual position numbers."""
+    q = quote(ticker)
+    info = ticker_info(ticker)
+    company = info.get("shortName") or info.get("longName") or ticker
+
+    header_left, header_right = st.columns([5, 1])
+    with header_left:
+        st.markdown(f"#### {ticker} · {company}")
+    with header_right:
+        if st.button("닫기", key=f"close_pos_detail_{ticker}", use_container_width=True):
+            st.session_state.pop("portfolio_selected_ticker", None)
+            st.rerun()
+
+    cols = st.columns(6)
+    cols[0].metric("현재가", money(q.get("price")), None if q.get("change_pct") is None else f'{q["change_pct"]:+.2f}%')
+    cols[1].metric("보유수량", f'{row["Shares"]:g}')
+    cols[2].metric("평단가", money(row["Avg Cost"]))
+    cols[3].metric("평가금액", money(row["Market Value"]))
+    cols[4].metric("평가손익", money(row["Unrealized P/L"]), f'{row["Unrealized P/L %"]:+.2f}%')
+    cols[5].metric("계좌 내 비중", f'{row["Weight %"]:.1f}%')
+
+    range_col, candle_col = st.columns([2, 1])
+    with range_col:
+        range_label = st.radio("기간", list(POSITION_CHART_RANGES), horizontal=True, index=5, key=f"pos_range_{ticker}")
+    candle_options = POSITION_CANDLES_BY_RANGE[range_label]
+    with candle_col:
+        interval = st.selectbox(
+            "봉", candle_options, index=candle_options.index(POSITION_DEFAULT_CANDLE[range_label]),
+            key=f"pos_candle_{ticker}_{range_label}",
+        )
+    period = POSITION_CHART_RANGES[range_label]
+    is_intraday = interval.endswith("m") or interval.endswith("h")
+    chart_data = intraday_history(ticker, period, interval) if is_intraday else history(ticker, period, interval)
+
+    if not chart_data.empty:
+        st.plotly_chart(
+            advanced_chart(
+                chart_data, ticker,
+                show_ma20=True, show_ma50=not is_intraday, show_ma100=False,
+                show_ma200=not is_intraday, show_bollinger=False, show_volume=True,
+                show_rsi=not is_intraday, show_macd=False, intraday=is_intraday,
+            ),
+            use_container_width=True,
+            config={"displayModeBar": True, "displaylogo": False},
+        )
+    else:
+        st.warning(f"{ticker}의 {range_label} / {interval} 데이터가 없습니다. 다른 봉을 선택하세요.")
+
+
 SECTORS = [
     "Auto detect", "Communication Services", "Consumer Discretionary",
     "Consumer Staples", "Energy", "Financial Services", "Healthcare",
@@ -435,6 +500,7 @@ def schwab_portfolio():
             summaries,
             use_container_width=True,
             hide_index=True,
+            key="schwab_account_balances_table",
             column_config={
                 "Liquidation Value": st.column_config.NumberColumn(format="$%.2f"),
                 "Cash": st.column_config.NumberColumn(format="$%.2f"),
@@ -462,10 +528,13 @@ def schwab_portfolio():
             sub_style = style_signed_columns(
                 sub_display, ["Unrealized P/L", "Unrealized P/L %", "Day Change $", "Day %"]
             )
-            st.dataframe(
+            event = st.dataframe(
                 sub_style,
                 use_container_width=True,
                 hide_index=True,
+                key=f"positions_table_{account_number}",
+                on_select="rerun",
+                selection_mode="single-row",
                 column_config={
                     "Shares": st.column_config.NumberColumn(format="%.4f"),
                     "Avg Cost": st.column_config.NumberColumn(format="$%.2f"),
@@ -478,6 +547,16 @@ def schwab_portfolio():
                     "Day %": st.column_config.NumberColumn("Day %", format="%+.2f%%"),
                 },
             )
+            rows_selected = (event or {}).get("selection", {}).get("rows", []) if hasattr(event, "get") else []
+            if rows_selected:
+                clicked_ticker = str(sub_display.iloc[rows_selected[0]]["Ticker"])
+                st.session_state["portfolio_selected_ticker"] = clicked_ticker
+                st.session_state["portfolio_selected_row"] = sub_display.iloc[rows_selected[0]].to_dict()
+
+    selected_ticker = st.session_state.get("portfolio_selected_ticker")
+    if selected_ticker and st.session_state.get("portfolio_selected_row"):
+        st.divider()
+        _position_detail(selected_ticker, pd.Series(st.session_state["portfolio_selected_row"]))
 
 
 @st.cache_data(ttl=86400, show_spinner=False)
