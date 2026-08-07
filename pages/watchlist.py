@@ -10,6 +10,7 @@ from engine.fundamentals import days_to_earnings, fundamental_score, ticker_info
 from engine.market_data import batch_history, batch_quotes, history, intraday_history, quote
 from utils.formatters import compact, money
 from utils.watchlist_store import delete_watchlist_item, load_watchlist_data, save_watchlist_data, storage_status
+from pages.command_center import _score_from_frame, _priority_tag
 
 DEFAULT = ["GOOGL","META","AMZN","MSFT","AAPL","NVDA","AVGO","SMH","CEG","VRT","ETN","ANET","SKHY","SPCX"]
 TAGS = ["Watch", "Long-term", "Swing", "Trade", "ETF", "AI", "Dividend", "High Risk"]
@@ -333,11 +334,20 @@ def render() -> None:
     with right_col:
         st.markdown("#### Watchlist")
         st.markdown('''<style>
-        .cl-row-box{display:grid;grid-template-columns:1fr 74px;gap:8px;align-items:center;padding:2px 4px 8px;border-bottom:1px solid #1d2f45}
-        .cl-price{font-size:13px;font-weight:800;color:#fff}.cl-change{font-size:11px;font-weight:850;margin-left:6px}
-        .cl-vol{font-size:9px;color:#71869f;margin-top:1px}
-        .cl-spark{width:74px;height:30px;overflow:visible}
-        div[data-testid="stVerticalBlockBorderWrapper"] button[kind="secondary"]{padding:2px 8px!important;min-height:0!important}
+        .wl-card{min-height:78px;padding:11px 12px;border-radius:12px;background:linear-gradient(180deg,rgba(14,30,49,.98),rgba(7,18,31,.98));border:1px solid rgba(148,163,184,.14);display:grid;grid-template-columns:minmax(0,1fr) 92px;gap:10px;align-items:center}
+        .wl-card.wl-active{border-color:#3f6c9e;background:linear-gradient(180deg,rgba(21,41,67,.98),rgba(10,24,40,.98))}
+        .wl-left{min-width:0}.wl-right{display:flex;flex-direction:column;align-items:flex-end;justify-content:space-between;min-height:52px}
+        .wl-top{display:flex;align-items:center;gap:6px}.wl-top b{font-size:13px;letter-spacing:.01em}
+        .wl-score{font-size:8px;padding:2px 6px;border-radius:999px;color:#9cb2c8;border:1px solid rgba(148,163,184,.18)}
+        .wl-price{font-size:16px;font-weight:850;line-height:1.15;margin-top:4px;white-space:nowrap}
+        .wl-change{font-size:10px;font-weight:850;margin-top:2px}
+        .wl-vol{font-size:8px;color:#71869f;margin-top:2px}
+        .wl-spark{width:90px;height:26px;overflow:visible}
+        .wl-spark path{fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+        .wl-tag{display:inline-block;font-size:8px;font-weight:900;letter-spacing:.08em;padding:2px 7px;border-radius:999px;background:rgba(100,166,255,.09);color:#64a6ff}
+        .wl-tag.buy{color:#35d6a5;background:rgba(53,214,165,.09)}.wl-tag.risk{color:#ff6474;background:rgba(255,100,116,.09)}.wl-tag.move{color:#f3c969;background:rgba(243,201,105,.09)}
+        div[data-testid="stVerticalBlockBorderWrapper"] button[kind="secondary"],
+        div[data-testid="stVerticalBlockBorderWrapper"] button[kind="primary"]{padding:0!important;min-height:30px!important;height:30px!important;width:30px!important;font-size:11px!important}
         </style>''', unsafe_allow_html=True)
         with st.container(height=640):
             for row in filtered:
@@ -346,29 +356,31 @@ def render() -> None:
                 change = q.get("change_pct")
                 day_change = q.get("change_abs")
                 positive = bool(change is not None and change >= 0)
-                color = _color(change)
-                spark = _sparkline_svg(histories.get(ticker, pd.DataFrame()), positive).replace('class="watch-spark"', 'class="cl-spark"').replace('class="watch-spark-empty"', 'class="cl-spark"')
+                score = _score_from_frame(histories.get(ticker))
+                tag, tag_css = _priority_tag(score, change)
+                spark = _sparkline_svg(histories.get(ticker, pd.DataFrame()), positive).replace('class="watch-spark"', 'class="wl-spark"').replace('class="watch-spark-empty"', 'class="wl-spark"')
                 pin = "★ " if row.get("pinned") else ""
                 is_active = ticker == selected
-                # A real Streamlit button -- clicking this only triggers an
-                # internal rerun (no browser page reload), so the scroll
-                # position and everything else on screen stays put; only the
-                # left detail panel's content changes.
-                if st.button(
-                    f"{'● ' if is_active else ''}{pin}{ticker}  ·  {row.get('tag', 'Watch')}",
-                    key=f"cl_select_{ticker}",
-                    use_container_width=True,
-                    type="primary" if is_active else "secondary",
-                ):
-                    st.session_state["watch_selected"] = ticker
-                    st.rerun()
-                st.markdown(f'''<div class="cl-row-box">
-                  <div>
-                    <span class="cl-price">{money(q.get("price"))}</span><span class="cl-change" style="color:{color}">{"—" if change is None else f"{change:+.2f}%"}</span>
-                    <div class="cl-vol">{"—" if day_change is None else f"{day_change:+.2f}"} · Vol {_fmt_volume(q.get("volume"))}</div>
-                  </div>
-                  {spark}
-                </div>''', unsafe_allow_html=True)
+
+                card_col, btn_col = st.columns([6, 1])
+                with card_col:
+                    st.markdown(f'''<div class="wl-card{" wl-active" if is_active else ""}">
+                      <div class="wl-left">
+                        <div class="wl-top"><b>{pin}{ticker}</b><span class="wl-score">{score:.0f}</span></div>
+                        <div class="wl-price">{money(q.get("price"))}</div>
+                        <div class="wl-change" style="color:{_color(change)}">{"—" if change is None else f"{change:+.2f}%"}</div>
+                        <div class="wl-vol">{"—" if day_change is None else f"{day_change:+.2f}"} · Vol {_fmt_volume(q.get("volume"))}</div>
+                      </div>
+                      <div class="wl-right">{spark}<div class="wl-tag {tag_css}">{tag}</div></div>
+                    </div>''', unsafe_allow_html=True)
+                with btn_col:
+                    st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
+                    # A real Streamlit button -- clicking this only triggers
+                    # an internal rerun (no browser page reload), so scroll
+                    # position stays put; only the left detail panel changes.
+                    if st.button("●" if is_active else "›", key=f"cl_select_{ticker}", type="primary" if is_active else "secondary"):
+                        st.session_state["watch_selected"] = ticker
+                        st.rerun()
 
     with left_col:
         if selected and selected in tickers:
