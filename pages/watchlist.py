@@ -68,6 +68,51 @@ def _detail(ticker: str, records: list[dict]) -> None:
     stats[4].metric("Target", money(row.get("target_price")))
     stats[5].metric("Earnings", "—" if days_to_earnings(ticker) is None else f'D{days_to_earnings(ticker):+d}')
 
+    target_price = row.get("target_price")
+    current_price = q.get("price")
+    if target_price:
+        if current_price and current_price <= target_price:
+            st.success(f"🎯 목표가 도달! 현재가 {money(current_price)} ≤ 목표가 {money(target_price)}")
+        else:
+            gap = ((current_price / target_price - 1) * 100) if current_price and target_price else None
+            st.info(f"목표가 {money(target_price)}까지 {'' if gap is None else f'{gap:+.1f}% 남음'}")
+
+        st.markdown("##### 분할 매수 계획 (목표가 기준)")
+        plan_cols = st.columns([1, 1, 2])
+        plan_budget = plan_cols[0].number_input("예산", min_value=100.0, value=5000.0, step=100.0, key=f"plan_budget_{ticker}")
+        plan_spacing = plan_cols[1].slider("분할 간격", 1.0, 15.0, 4.0, 0.5, format="%.1f%%", key=f"plan_spacing_{ticker}")
+        from engine.planner import build as _build_plan
+        plan_df = pd.DataFrame(_build_plan(float(target_price), plan_budget, plan_spacing))
+        st.dataframe(
+            plan_df, use_container_width=True, hide_index=True,
+            column_config={
+                "Buy Price": st.column_config.NumberColumn(format="$%.2f"),
+                "Allocation": st.column_config.NumberColumn(format="$%.2f"),
+                "Estimated Cost": st.column_config.NumberColumn(format="$%.2f"),
+            },
+        )
+    else:
+        st.caption("아직 목표가가 설정되지 않았습니다. 아래에서 직접 정하거나, AI에게 제안받으세요.")
+        from engine.claude_advisor import configured as _ai_configured, ask as _ai_ask
+        if _ai_configured() and st.button("🤖 AI 목표가 제안", key=f"ai_target_{ticker}"):
+            support = a.get("support")
+            rsi_val = a.get("rsi")
+            week52_low = info.get("fiftyTwoWeekLow")
+            week52_high = info.get("fiftyTwoWeekHigh")
+            system = (
+                "너는 개인 투자 대시보드에 내장된 한국어 매수 목표가 제안 어시스턴트다. "
+                "제공된 데이터만 근거로 적정 매수 목표가 하나를 제안하고, 왜 그 가격인지 2~3문장으로 짧게 설명해라. "
+                "확정적 조언이 아니라 참고용 제안 톤을 유지해라. 마지막 줄에 '제안 목표가: $숫자' 형식으로 명확히 표기해라."
+            )
+            user = (
+                f"종목: {ticker}\n현재가: {current_price}\n지지선(계산값): {support}\nRSI: {rsi_val}\n"
+                f"52주 최저: {week52_low}\n52주 최고: {week52_high}\n목표가를 제안해줘."
+            )
+            with st.spinner("AI 목표가 계산 중..."):
+                st.session_state[f"ai_target_text_{ticker}"] = _ai_ask(system, user, max_tokens=400)
+        if st.session_state.get(f"ai_target_text_{ticker}"):
+            st.markdown(f'<div class="panel">{st.session_state[f"ai_target_text_{ticker}"]}</div>', unsafe_allow_html=True)
+
     range_stats = st.columns(4)
     range_stats[0].metric("52W High", money(info.get("fiftyTwoWeekHigh")))
     range_stats[1].metric("52W Low", money(info.get("fiftyTwoWeekLow")))
@@ -364,12 +409,17 @@ def render() -> None:
 
                 card_col, btn_col = st.columns([6, 1])
                 with card_col:
+                    target_price = row.get("target_price")
+                    price_now = q.get("price")
+                    hit_target = bool(target_price and price_now and price_now <= target_price)
+                    target_badge = '<div class="wl-tag" style="background:rgba(53,214,165,.15);color:#35d6a5;margin-top:3px">🎯 TARGET HIT</div>' if hit_target else ""
                     st.markdown(f'''<div class="wl-card{" wl-active" if is_active else ""}">
                       <div class="wl-left">
                         <div class="wl-top"><b>{pin}{ticker}</b><span class="wl-score">{score:.0f}</span></div>
                         <div class="wl-price">{money(q.get("price"))}</div>
                         <div class="wl-change" style="color:{_color(change)}">{"—" if change is None else f"{change:+.2f}%"}</div>
                         <div class="wl-vol">{"—" if day_change is None else f"{day_change:+.2f}"} · Vol {_fmt_volume(q.get("volume"))}</div>
+                        {target_badge}
                       </div>
                       <div class="wl-right">{spark}<div class="wl-tag {tag_css}">{tag}</div></div>
                     </div>''', unsafe_allow_html=True)

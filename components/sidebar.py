@@ -6,14 +6,14 @@ import streamlit as st
 NAV_GROUPS = {
     "HOME": ["Command Center"],
     "MARKETS": ["Heatmap", "Watchlist"],
-    "PORTFOLIO": ["Portfolio", "Buy Planner"],
+    "PORTFOLIO": ["Portfolio"],
     "INTELLIGENCE": ["AI Center", "Earnings"],
     "SYSTEM": ["Schwab", "Journal", "Settings"],
 }
 
 NAV_ICONS = {
     "Command Center": "⌂", "Heatmap": "▦", "Watchlist": "☆",
-    "Portfolio": "◉", "Buy Planner": "＋", "AI Center": "✦", "Earnings": "◷",
+    "Portfolio": "◉", "AI Center": "✦", "Earnings": "◷",
     "Schwab": "🏦", "Journal": "✎", "Settings": "⚙",
 }
 
