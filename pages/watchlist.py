@@ -241,15 +241,17 @@ def _sparkline_svg(frame: pd.DataFrame, positive: bool) -> str:
 
     area_path = f"{path} L {pts[-1][0]:.1f},{height:.1f} L {pts[0][0]:.1f},{height:.1f} Z"
     color = "#4da3ff" if positive else "#ff6474"
-    # NOTE: deliberately no <defs>/<linearGradient>/<stop> here -- Streamlit's
-    # markdown renderer doesn't reliably parse those SVG sub-elements inside
-    # unsafe_allow_html and shows the raw markup as literal text instead of
-    # rendering it. A flat low-opacity fill gives a similar soft look
-    # without relying on gradient defs.
-    return f'''<svg class="watch-spark" viewBox="0 0 {width} {height}" preserveAspectRatio="none" aria-hidden="true">
-      <path d="{area_path}" fill="{color}" fill-opacity="0.16" stroke="none"/>
-      <path d="{path}" fill="none" stroke="{color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-    </svg>'''
+    # Single-line output on purpose: a multi-line string here, once embedded
+    # into another multi-line f-string, can produce a blank/whitespace-only
+    # line inside the surrounding unsafe_allow_html block. Streamlit's
+    # markdown parser treats that as the end of raw HTML and dumps
+    # everything after it as literal escaped text instead of rendering it.
+    return (
+        f'<svg class="watch-spark" viewBox="0 0 {width} {height}" preserveAspectRatio="none" aria-hidden="true">'
+        f'<path d="{area_path}" fill="{color}" fill-opacity="0.16" stroke="none"/>'
+        f'<path d="{path}" fill="none" stroke="{color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>'
+        f'</svg>'
+    )
 
 
 def _mover_table(rows: list[dict], quotes: dict[str, dict]) -> None:
@@ -411,16 +413,22 @@ def render() -> None:
                     price_now = q.get("price")
                     hit_target = bool(target_price and price_now and price_now <= target_price)
                     target_badge = '<div class="wl-tag" style="background:rgba(53,214,165,.15);color:#35d6a5;margin-top:3px">🎯 TARGET HIT</div>' if hit_target else ""
-                    st.markdown(f'''<div class="wl-card{" wl-active" if is_active else ""}">
-                      <div class="wl-left">
-                        <div class="wl-top"><b>{pin}{ticker}</b><span class="wl-score">{score:.0f}</span></div>
-                        <div class="wl-price">{money(q.get("price"))}</div>
-                        <div class="wl-change" style="color:{_color(change)}">{"—" if change is None else f"{change:+.2f}%"}</div>
-                        <div class="wl-vol">{"—" if day_change is None else f"{day_change:+.2f}"} · Vol {_fmt_volume(q.get("volume"))}</div>
-                        {target_badge}
-                      </div>
-                      <div class="wl-right">{spark}<div class="wl-tag {tag_css}">{tag}</div></div>
-                    </div>''', unsafe_allow_html=True)
+                    active_cls = " wl-active" if is_active else ""
+                    change_txt = "—" if change is None else f"{change:+.2f}%"
+                    day_change_txt = "—" if day_change is None else f"{day_change:+.2f}"
+                    card_html = (
+                        f'<div class="wl-card{active_cls}">'
+                        f'<div class="wl-left">'
+                        f'<div class="wl-top"><b>{pin}{ticker}</b><span class="wl-score">{score:.0f}</span></div>'
+                        f'<div class="wl-price">{money(q.get("price"))}</div>'
+                        f'<div class="wl-change" style="color:{_color(change)}">{change_txt}</div>'
+                        f'<div class="wl-vol">{day_change_txt} · Vol {_fmt_volume(q.get("volume"))}</div>'
+                        f'{target_badge}'
+                        f'</div>'
+                        f'<div class="wl-right">{spark}<div class="wl-tag {tag_css}">{tag}</div></div>'
+                        f'</div>'
+                    )
+                    st.markdown(card_html, unsafe_allow_html=True)
                 with btn_col:
                     st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
                     # A real Streamlit button -- clicking this only triggers
