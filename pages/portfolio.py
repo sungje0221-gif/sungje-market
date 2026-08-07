@@ -491,7 +491,7 @@ def schwab_portfolio():
 
     st.markdown("### All Accounts — Overview & Signals")
     st.caption("아래 경고/제안은 규칙 기반입니다 (집중도, 현금 비중, 손실 종목 감지). Manual Portfolio와 동일한 로직을 씁니다.")
-    _portfolio_dashboard(dashboard_df, settings, realized_pl=0.0)
+    _portfolio_dashboard(dashboard_df, settings, realized_pl=0.0, key_prefix="schwab")
 
     if not summaries.empty:
         st.divider()
@@ -617,7 +617,7 @@ def _suggest_strategy(ticker: str, profile: dict) -> str:
     return "Other"
 
 
-def _portfolio_dashboard(e: pd.DataFrame, settings: dict, realized_pl: float = 0.0):
+def _portfolio_dashboard(e: pd.DataFrame, settings: dict, realized_pl: float = 0.0, key_prefix: str = "default"):
     invested = float(e["Market Value"].sum())
     cash = float(settings.get("cash", 0))
     buying_power = float(settings.get("buying_power", 0))
@@ -667,7 +667,7 @@ def _portfolio_dashboard(e: pd.DataFrame, settings: dict, realized_pl: float = 0
         from engine.claude_advisor import configured as _ai_configured, ask as _ai_ask
         if _ai_configured():
             attn_key = "|".join(t for _, t in attention)
-            if st.button("🤖 AI 리밸런싱 조언", key="ai_rebalance_btn"):
+            if st.button("🤖 AI 리밸런싱 조언", key=f"ai_rebalance_btn_{key_prefix}"):
                 top_holdings = e.nlargest(8, "Weight %")[["Ticker", "Weight %", "P/L %"]] if "Weight %" in e and "P/L %" in e else pd.DataFrame()
                 holdings_text = "\n".join(
                     f"- {r['Ticker']}: 비중 {r['Weight %']:.1f}%, 손익 {r['P/L %']:+.1f}%"
@@ -682,10 +682,10 @@ def _portfolio_dashboard(e: pd.DataFrame, settings: dict, realized_pl: float = 0
                 )
                 user = f"규칙 기반 경고:\n{attention_text}\n\n비중 상위 보유종목:\n{holdings_text}\n\n리밸런싱 조언을 작성해줘."
                 with st.spinner("AI 조언 생성 중..."):
-                    st.session_state["ai_rebalance_text"] = _ai_ask(system, user, max_tokens=700)
-                    st.session_state["ai_rebalance_key"] = attn_key
-            if st.session_state.get("ai_rebalance_text"):
-                st.markdown(f'<div class="panel">{st.session_state["ai_rebalance_text"]}</div>', unsafe_allow_html=True)
+                    st.session_state[f"ai_rebalance_text_{key_prefix}"] = _ai_ask(system, user, max_tokens=700)
+                    st.session_state[f"ai_rebalance_key_{key_prefix}"] = attn_key
+            if st.session_state.get(f"ai_rebalance_text_{key_prefix}"):
+                st.markdown(f'<div class="panel">{st.session_state[f"ai_rebalance_text_{key_prefix}"]}</div>', unsafe_allow_html=True)
     with right:
         st.markdown("### Target vs Current")
         comp=pd.DataFrame({"Allocation":["Invested","Cash"],"Current %":[100-cash_pct,cash_pct],"Target %":[100-target_cash,target_cash]})
@@ -775,7 +775,7 @@ def manual_portfolio():
         save_portfolio(updated); st.rerun()
 
     e = enrich(df)
-    _portfolio_dashboard(e, settings, _realized_pl_total())
+    _portfolio_dashboard(e, settings, _realized_pl_total(), key_prefix="manual")
     st.markdown("### Holdings")
     display=e[[c for c in ["Account","Ticker","Shares","Avg Cost","Category","Sector","Industry","Current Price","Day %","Market Value","Cost Basis","P/L","P/L %","Weight %"] if c in e.columns]].copy()
     edited=st.data_editor(
