@@ -367,8 +367,9 @@ def render() -> None:
               {spark}
             </div></a>''', unsafe_allow_html=True)
 
-        if selected and selected in tickers:
-            st.session_state["watch_selected"] = selected
-            st.divider()
-            _detail(selected, records)
+    selected = st.query_params.get("watch") or st.session_state.get("watch_selected")
+    if selected and selected in tickers:
+        st.session_state["watch_selected"] = selected
+        st.divider()
+        _detail(selected, records)
 
