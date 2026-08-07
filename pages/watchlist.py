@@ -176,15 +176,35 @@ def _sparkline_svg(frame: pd.DataFrame, positive: bool) -> str:
         return '<div class="watch-spark-empty">—</div>'
     low, high = min(values), max(values)
     spread = high - low or 1.0
-    width, height = 150, 38
+    width, height = 150, 40
+    pad_top, pad_bottom = 4, 6
     pts = []
     for i, val in enumerate(values):
         x = i * width / (len(values) - 1)
-        y = height - ((val - low) / spread) * (height - 5) - 2
-        pts.append(f"{x:.1f},{y:.1f}")
-    color = "#45a3ff" if positive else "#ff5b6e"
+        y = pad_top + (1 - (val - low) / spread) * (height - pad_top - pad_bottom)
+        pts.append((x, y))
+
+    # Smooth the jagged raw line into a soft curve: quadratic-bezier through
+    # the midpoint of each consecutive pair of points. Cheap and dependency
+    # free, but reads far better than a plain polyline at this size.
+    path = f"M {pts[0][0]:.1f},{pts[0][1]:.1f}"
+    for i in range(1, len(pts) - 1):
+        mx, my = (pts[i][0] + pts[i + 1][0]) / 2, (pts[i][1] + pts[i + 1][1]) / 2
+        path += f" Q {pts[i][0]:.1f},{pts[i][1]:.1f} {mx:.1f},{my:.1f}"
+    path += f" L {pts[-1][0]:.1f},{pts[-1][1]:.1f}"
+
+    area_path = f"{path} L {pts[-1][0]:.1f},{height:.1f} L {pts[0][0]:.1f},{height:.1f} Z"
+    color = "#4da3ff" if positive else "#ff6474"
+    grad_id = f"sg{abs(hash((tuple(values), positive))) % 100000}"
     return f'''<svg class="watch-spark" viewBox="0 0 {width} {height}" preserveAspectRatio="none" aria-hidden="true">
-      <polyline points="{' '.join(pts)}" fill="none" stroke="{color}" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/>
+      <defs>
+        <linearGradient id="{grad_id}" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="{color}" stop-opacity="0.35"/>
+          <stop offset="100%" stop-color="{color}" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      <path d="{area_path}" fill="url(#{grad_id})" stroke="none"/>
+      <path d="{path}" fill="none" stroke="{color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>'''
 
 
@@ -317,7 +337,7 @@ def render() -> None:
         .cl-price-line{display:flex;justify-content:space-between;align-items:baseline;padding:0 4px}
         .cl-price{font-size:13px;font-weight:800;color:#fff}.cl-change{font-size:11px;font-weight:850}
         .cl-vol{font-size:9px;color:#71869f;padding:0 4px;margin-top:1px}
-        .cl-spark{width:100%;height:20px;margin-top:2px}
+        .cl-spark{width:100%;height:30px;margin-top:3px}
         div[data-testid="stVerticalBlockBorderWrapper"] button[kind="secondary"]{padding:2px 8px!important;min-height:0!important}
         </style>''', unsafe_allow_html=True)
         with st.container(height=640):
