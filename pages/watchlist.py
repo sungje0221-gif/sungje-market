@@ -67,6 +67,12 @@ def _detail(ticker: str, records: list[dict]) -> None:
     stats[4].metric("Target", money(row.get("target_price")))
     stats[5].metric("Earnings", "—" if days_to_earnings(ticker) is None else f'D{days_to_earnings(ticker):+d}')
 
+    range_stats = st.columns(4)
+    range_stats[0].metric("52W High", money(info.get("fiftyTwoWeekHigh")))
+    range_stats[1].metric("52W Low", money(info.get("fiftyTwoWeekLow")))
+    range_stats[2].metric("Day Change $", "—" if q.get("change_abs") is None else f'{q["change_abs"]:+.2f}')
+    range_stats[3].metric("Volume", _fmt_volume(q.get("volume")))
+
     range_col, candle_col = st.columns([2, 1])
     with range_col:
         range_label = st.radio("Range", list(RANGES), horizontal=True, index=0, key=f"range_{ticker}")
@@ -133,6 +139,20 @@ def _detail(ticker: str, records: list[dict]) -> None:
     f[3].metric("Forward P/E", "—" if info.get("forwardPE") is None else f'{info.get("forwardPE"):.1f}')
     f[4].metric("EPS", "—" if info.get("trailingEps") is None else f'${info.get("trailingEps"):.2f}')
     f[5].metric("Target Mean", money(info.get("targetMeanPrice")))
+
+    st.markdown("### Related News")
+    from pages.news import news as _fetch_news
+    items, source, error = _fetch_news(ticker)
+    st.caption(f"Source: {source} · cached for 15 minutes")
+    if not items:
+        st.caption("지금은 관련 뉴스를 가져오지 못했습니다.")
+    else:
+        for item in items[:5]:
+            st.markdown(f"**{item['title']}**")
+            st.caption(item.get("provider") or "Unknown")
+            if item.get("url"):
+                st.link_button("Open article", item["url"], key=f"wl_news_{ticker}_{item['title'][:40]}")
+            st.divider()
 
 
 def _fmt_volume(value: float | None) -> str:
@@ -351,33 +371,36 @@ def render() -> None:
             st.markdown("#### Watchlist")
             st.markdown('''<style>
             .cl-row-link{display:block;text-decoration:none!important;color:inherit!important}
-            .cl-row{display:grid;grid-template-columns:1fr 90px;align-items:center;gap:8px;padding:9px 8px;border-bottom:1px solid #1d2f45;border-radius:8px}
+            .cl-row{display:grid;grid-template-columns:1fr 95px;align-items:center;gap:8px;padding:9px 8px;border-bottom:1px solid #1d2f45;border-radius:8px}
             .cl-row:hover{background:#0e1e30}
             .cl-row-active{background:#152943;border:1px solid #3f6c9e}
             .cl-ticker{font-size:13px;font-weight:850;color:#f4f8ff;display:block}.cl-tag{font-size:8px;color:#78aee8;letter-spacing:.6px;text-transform:uppercase}
+            .cl-vol{font-size:9px;color:#71869f;margin-top:2px;grid-column:1/2}
             .cl-price-wrap{text-align:right}.cl-price{font-size:13px;font-weight:800;color:#fff;display:block}.cl-change{font-size:10px;font-weight:850;display:block;margin-top:1px}
-            .cl-spark{width:100%;height:22px;margin-top:4px;grid-column:1/-1}
+            .cl-spark{width:100%;height:20px;margin-top:4px;grid-column:1/-1}
             </style>''', unsafe_allow_html=True)
-            for row in filtered:
-                ticker = row["ticker"]
-                q = quotes.get(ticker, {})
-                change = q.get("change_pct")
-                day_change = q.get("change_abs")
-                positive = bool(change is not None and change >= 0)
-                color = _color(change)
-                spark = _sparkline_svg(histories.get(ticker, pd.DataFrame()), positive).replace('class="watch-spark"', 'class="cl-spark"').replace('class="watch-spark-empty"', 'class="cl-spark"')
-                pin = "★ " if row.get("pinned") else ""
-                href = f"?watch={ticker}"
-                active_cls = " cl-row-active" if ticker == selected else ""
-                st.markdown(f'''<a class="cl-row-link" href="{href}" target="_self">
-                <div class="cl-row{active_cls}">
-                  <div><span class="cl-ticker">{pin}{ticker}</span><span class="cl-tag">{row.get("tag", "Watch")}</span></div>
-                  <div class="cl-price-wrap">
-                    <span class="cl-price">{money(q.get("price"))}</span>
-                    <span class="cl-change" style="color:{color}">{"—" if change is None else f"{change:+.2f}%"}</span>
-                  </div>
-                  {spark}
-                </div></a>''', unsafe_allow_html=True)
+            with st.container(height=640):
+                for row in filtered:
+                    ticker = row["ticker"]
+                    q = quotes.get(ticker, {})
+                    change = q.get("change_pct")
+                    day_change = q.get("change_abs")
+                    positive = bool(change is not None and change >= 0)
+                    color = _color(change)
+                    spark = _sparkline_svg(histories.get(ticker, pd.DataFrame()), positive).replace('class="watch-spark"', 'class="cl-spark"').replace('class="watch-spark-empty"', 'class="cl-spark"')
+                    pin = "★ " if row.get("pinned") else ""
+                    href = f"?watch={ticker}"
+                    active_cls = " cl-row-active" if ticker == selected else ""
+                    st.markdown(f'''<a class="cl-row-link" href="{href}" target="_self">
+                    <div class="cl-row{active_cls}">
+                      <div><span class="cl-ticker">{pin}{ticker}</span><span class="cl-tag">{row.get("tag", "Watch")}</span></div>
+                      <div class="cl-price-wrap">
+                        <span class="cl-price">{money(q.get("price"))}</span>
+                        <span class="cl-change" style="color:{color}">{"—" if change is None else f"{change:+.2f}%"}</span>
+                      </div>
+                      <div class="cl-vol">{"—" if day_change is None else f"{day_change:+.2f}"} · Vol {_fmt_volume(q.get("volume"))}</div>
+                      {spark}
+                    </div></a>''', unsafe_allow_html=True)
 
         with left_col:
             if selected and selected in tickers:
