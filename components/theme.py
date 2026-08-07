@@ -102,7 +102,7 @@ def inject_theme() -> None:
           background:rgba(59,130,246,.12);border:1px solid rgba(96,165,250,.2);font-size:10px;}
         div[data-testid="stMetric"] {background:linear-gradient(180deg,rgba(15,32,53,.98),rgba(8,20,34,.98));
           border:1px solid var(--os-border);padding:14px;border-radius:14px;
-          min-height:92px; display:flex; flex-direction:column; justify-content:flex-start;}
+          min-height:112px; display:flex; flex-direction:column; justify-content:flex-start;}
         /* Some metrics in a row have a delta (e.g. "-4.98%") and some don't,
            which used to make st.metric() boxes different heights and throw
            off every row of cards across the app. A fixed min-height plus
