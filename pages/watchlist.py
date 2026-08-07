@@ -241,15 +241,13 @@ def _sparkline_svg(frame: pd.DataFrame, positive: bool) -> str:
 
     area_path = f"{path} L {pts[-1][0]:.1f},{height:.1f} L {pts[0][0]:.1f},{height:.1f} Z"
     color = "#4da3ff" if positive else "#ff6474"
-    grad_id = f"sg{abs(hash((tuple(values), positive))) % 100000}"
+    # NOTE: deliberately no <defs>/<linearGradient>/<stop> here -- Streamlit's
+    # markdown renderer doesn't reliably parse those SVG sub-elements inside
+    # unsafe_allow_html and shows the raw markup as literal text instead of
+    # rendering it. A flat low-opacity fill gives a similar soft look
+    # without relying on gradient defs.
     return f'''<svg class="watch-spark" viewBox="0 0 {width} {height}" preserveAspectRatio="none" aria-hidden="true">
-      <defs>
-        <linearGradient id="{grad_id}" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="{color}" stop-opacity="0.35"/>
-          <stop offset="100%" stop-color="{color}" stop-opacity="0"/>
-        </linearGradient>
-      </defs>
-      <path d="{area_path}" fill="url(#{grad_id})" stroke="none"/>
+      <path d="{area_path}" fill="{color}" fill-opacity="0.16" stroke="none"/>
       <path d="{path}" fill="none" stroke="{color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>'''
 
