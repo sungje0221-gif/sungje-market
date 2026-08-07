@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from urllib.parse import quote
+
 import pandas as pd
 import streamlit as st
 
@@ -262,7 +264,15 @@ def render() -> None:
         ["Biggest losers", "Biggest gainers", "Largest move", "Pinned", "Ticker"],
         label_visibility="collapsed",
     )
-    view = toolbar[3].selectbox("View", ["Table + Cards", "Table only", "Cards only", "Compact List"], label_visibility="collapsed")
+    view_options = ["Table + Cards", "Table only", "Cards only", "Compact List"]
+    default_view = st.query_params.get("view") or st.session_state.get("watch_view") or "Table + Cards"
+    if default_view not in view_options:
+        default_view = "Table + Cards"
+    view = toolbar[3].selectbox(
+        "View", view_options, index=view_options.index(default_view),
+        label_visibility="collapsed", key="watch_view_select",
+    )
+    st.session_state["watch_view"] = view
 
     filtered = [
         r for r in records
@@ -335,7 +345,7 @@ def render() -> None:
                 pin = "★ " if row.get("pinned") else ""
                 spark = _sparkline_svg(histories.get(ticker, pd.DataFrame()), positive)
                 day_change = q.get("change_abs")
-                href = f"?watch={ticker}"
+                href = f"?watch={ticker}&view={quote(view)}"
                 with col:
                     top_l, top_r = st.columns([3, 2])
                     with top_r:
@@ -389,7 +399,7 @@ def render() -> None:
                     color = _color(change)
                     spark = _sparkline_svg(histories.get(ticker, pd.DataFrame()), positive).replace('class="watch-spark"', 'class="cl-spark"').replace('class="watch-spark-empty"', 'class="cl-spark"')
                     pin = "★ " if row.get("pinned") else ""
-                    href = f"?watch={ticker}"
+                    href = f"?watch={ticker}&view={quote(view)}"
                     active_cls = " cl-row-active" if ticker == selected else ""
                     st.markdown(f'''<a class="cl-row-link" href="{href}" target="_self">
                     <div class="cl-row{active_cls}">
