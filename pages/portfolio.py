@@ -665,9 +665,23 @@ def _portfolio_dashboard(e: pd.DataFrame, settings: dict, realized_pl: float = 0
         if cash_pct < target_cash-5: attention.append(("warning",f"현금 {cash_pct:.1f}% — 목표 {target_cash:.1f}%보다 낮습니다."))
         elif cash_pct > target_cash+10: attention.append(("info",f"현금 {cash_pct:.1f}% — 목표보다 높아 매수 여력이 큽니다."))
         weak=e[e["P/L %"] <= -10].sort_values("P/L %") if "P/L %" in e else pd.DataFrame()
-        for _,r in weak.head(3).iterrows(): attention.append(("warning",f"{r['Ticker']} 누적 손실 {r['P/L %']:.1f}%"))
-        if not attention: attention=[("success","현재 즉시 경고할 집중도·현금·손실 항목이 없습니다.")]
+        # Schwab's cost basis can be wash-sale adjusted, which distorts
+        # displayed P/L % and makes a "누적 손실" warning misleading (it may
+        # not reflect real economic loss). Manual Portfolio's cost basis is
+        # entered directly by the user, so it stays a reliable warning there.
+        if key_prefix != "schwab":
+            for _,r in weak.head(3).iterrows(): attention.append(("warning",f"{r['Ticker']} 누적 손실 {r['P/L %']:.1f}%"))
+        if not attention: attention=[("success","현재 즉시 경고할 집중도·현금 항목이 없습니다." if key_prefix=="schwab" else "현재 즉시 경고할 집중도·현금·손실 항목이 없습니다.")]
         for kind,text in attention: getattr(st,kind)(text)
+
+        if key_prefix == "schwab" and not weak.empty:
+            with st.expander(f"참고 — 평가손익 -10% 이하 종목 {len(weak)}개 (Wash Sale 영향 가능)"):
+                st.caption("Schwab의 평단가는 wash sale 규정으로 조정될 수 있어, 아래 손익률이 실제 매수 대비 손익과 다를 수 있습니다. 그래서 위 경고 목록에는 포함하지 않았습니다.")
+                st.dataframe(
+                    weak[["Ticker","P/L %"]],
+                    use_container_width=True, hide_index=True,
+                    column_config={"P/L %": st.column_config.NumberColumn(format="%+.1f%%")},
+                )
 
         from engine.claude_advisor import configured as _ai_configured, ask as _ai_ask
         if _ai_configured():
