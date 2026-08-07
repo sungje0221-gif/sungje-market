@@ -242,7 +242,7 @@ def render() -> None:
         ["Biggest losers", "Biggest gainers", "Largest move", "Pinned", "Ticker"],
         label_visibility="collapsed",
     )
-    view = toolbar[3].selectbox("View", ["Table + Cards", "Table only", "Cards only"], label_visibility="collapsed")
+    view = toolbar[3].selectbox("View", ["Table + Cards", "Table only", "Cards only", "Compact List"], label_visibility="collapsed")
 
     filtered = [
         r for r in records
@@ -262,7 +262,7 @@ def render() -> None:
     else:
         filtered.sort(key=lambda r: r["ticker"])
 
-    if view != "Cards only":
+    if view in ("Table + Cards", "Table only"):
         st.markdown("### Daily Movers")
         st.caption("기본적으로 가장 많이 내린 종목부터 정렬됩니다. 위 Sort 메뉴에서 바로 변경할 수 있습니다.")
         _mover_table(filtered, quotes)
@@ -279,7 +279,7 @@ def render() -> None:
             st.session_state.pop("watch_selected", None)
             st.rerun()
 
-    if view != "Table only":
+    if view in ("Table + Cards", "Cards only"):
         st.markdown("### My Investment Cards")
         st.caption("카드 아무 곳이나 누르면 상세 화면이 열립니다. 미니 차트는 실제 최근 30거래일 종가이며, 점수는 추세·20일 모멘텀·RSI·MACD 기반 규칙 점수입니다.")
 
@@ -334,6 +334,38 @@ def render() -> None:
                       <div class="wc-footer"><span class="wc-ai">RULE SCORE <b>{"—" if score is None else f"{score:.0f}"}</b></span><span class="wc-action">{action}</span></div>
                       <div class="wc-source">Chart: actual last 30 closes · no random data</div>
                     </div></a>''', unsafe_allow_html=True)
+
+    if view == "Compact List":
+        st.markdown("### Watchlist")
+        st.caption("가격/등락/미니차트만 빠르게 훑어보는 모바일 친화 리스트입니다. 행을 누르면 상세 화면이 열립니다.")
+        histories = batch_history(tuple(r["ticker"] for r in filtered), period="1mo", interval="1d")
+        st.markdown('''<style>
+        .cl-row-link{display:block;text-decoration:none!important;color:inherit!important}
+        .cl-row{display:grid;grid-template-columns:1fr 90px 110px;align-items:center;gap:10px;padding:10px 6px;border-bottom:1px solid #1d2f45}
+        .cl-row:hover{background:#0e1e30}
+        .cl-ticker{font-size:14px;font-weight:850;color:#f4f8ff}.cl-tag{font-size:8px;color:#78aee8;margin-left:6px;letter-spacing:.6px;text-transform:uppercase}
+        .cl-price-wrap{text-align:right}.cl-price{font-size:14px;font-weight:800;color:#fff;display:block}.cl-change{font-size:11px;font-weight:850;display:block;margin-top:1px}
+        .cl-spark{width:100%;height:28px}
+        </style>''', unsafe_allow_html=True)
+        for row in filtered:
+            ticker = row["ticker"]
+            q = quotes.get(ticker, {})
+            change = q.get("change_pct")
+            day_change = q.get("change_abs")
+            positive = bool(change is not None and change >= 0)
+            color = _color(change)
+            spark = _sparkline_svg(histories.get(ticker, pd.DataFrame()), positive).replace('class="watch-spark"', 'class="cl-spark"').replace('class="watch-spark-empty"', 'class="cl-spark"')
+            pin = "★ " if row.get("pinned") else ""
+            href = f"?watch={ticker}"
+            st.markdown(f'''<a class="cl-row-link" href="{href}" target="_self">
+            <div class="cl-row">
+              <div><span class="cl-ticker">{pin}{ticker}</span><span class="cl-tag">{row.get("tag", "Watch")}</span></div>
+              <div class="cl-price-wrap">
+                <span class="cl-price">{money(q.get("price"))}</span>
+                <span class="cl-change" style="color:{color}">{"—" if change is None else f"{change:+.2f}%"}{"" if day_change is None else f" ({day_change:+.2f})"}</span>
+              </div>
+              {spark}
+            </div></a>''', unsafe_allow_html=True)
 
         if selected and selected in tickers:
             st.session_state["watch_selected"] = selected
