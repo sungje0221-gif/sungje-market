@@ -650,10 +650,11 @@ def _portfolio_dashboard(e: pd.DataFrame, settings: dict, realized_pl: float = 0
     c[7].metric("Risk", risk)
     st.caption(f"Today's P/L: {money(day_pl)}")
 
-    st.markdown("### Today's Changes")
-    movers=e.sort_values("Day %", ascending=True).copy() if "Day %" in e else e.copy()
-    movers=movers[[c for c in ["Ticker","Current Price","Day %","Day Change $","Market Value","Weight %"] if c in movers.columns]]
-    st.dataframe(style_signed_columns(movers,["Day %","Day Change $"]),use_container_width=True,hide_index=True,height=min(330,38*(len(movers)+1)))
+    if key_prefix != "manual":
+        st.markdown("### Today's Changes")
+        movers=e.sort_values("Day %", ascending=True).copy() if "Day %" in e else e.copy()
+        movers=movers[[c for c in ["Ticker","Current Price","Day %","Day Change $","Market Value","Weight %"] if c in movers.columns]]
+        st.dataframe(style_signed_columns(movers,["Day %","Day Change $"]),use_container_width=True,hide_index=True,height=min(330,38*(len(movers)+1)))
 
     left,right=st.columns([1.2,1])
     with left:
@@ -704,7 +705,7 @@ def _portfolio_dashboard(e: pd.DataFrame, settings: dict, realized_pl: float = 0
                     st.session_state[f"ai_rebalance_text_{key_prefix}"] = _ai_ask(system, user, max_tokens=1400)
                     st.session_state[f"ai_rebalance_key_{key_prefix}"] = attn_key
             if st.session_state.get(f"ai_rebalance_text_{key_prefix}"):
-                with st.container(border=True):
+                with st.expander("🤖 AI 리밸런싱 제안", expanded=True):
                     st.markdown(st.session_state[f"ai_rebalance_text_{key_prefix}"])
     with right:
         st.markdown("### Target vs Current")
@@ -800,29 +801,64 @@ def manual_portfolio():
     signal_map_manual = _ai_radar_manual(equity_only_manual).set_index("Ticker")["Signal"].to_dict() if equity_only_manual else {}
     e["Signal"] = e["Ticker"].map(signal_map_manual).fillna("—")
     _portfolio_dashboard(e, settings, _realized_pl_total(), key_prefix="manual")
+
     st.markdown("### Holdings")
-    display=e[[c for c in ["Account","Ticker","Signal","Shares","Avg Cost","Category","Sector","Industry","Current Price","Day %","Market Value","Cost Basis","P/L","P/L %","Weight %"] if c in e.columns]].copy()
-    edited=st.data_editor(
-        display,
-        use_container_width=True,
-        hide_index=True,
-        disabled=["Signal","Current Price","Day %","Market Value","Cost Basis","P/L","P/L %","Weight %"],
-        column_config={
-            "Category": st.column_config.SelectboxColumn("Strategy", options=STRATEGIES),
-            "Sector": st.column_config.SelectboxColumn("Sector", options=[x for x in SECTORS if x != "Auto detect"]),
-            "Shares": st.column_config.NumberColumn(format="%.4f"),
-            "Avg Cost": st.column_config.NumberColumn(format="$%.2f"),
-            "Current Price": st.column_config.NumberColumn(format="$%.2f"),
-            "Day %": st.column_config.NumberColumn(format="%+.2f%%"),
-            "Market Value": st.column_config.NumberColumn(format="$%.2f"),
-            "P/L": st.column_config.NumberColumn(format="$%.2f"),
-            "P/L %": st.column_config.NumberColumn(format="%+.2f%%"),
-            "Weight %": st.column_config.NumberColumn(format="%.2f%%"),
-        },
-        key="portfolio_holdings_editor",
-    )
-    if st.button("Save holdings edits"):
-        base=edited[["Account","Ticker","Shares","Avg Cost","Category","Sector","Industry"]].copy(); save_portfolio(base); st.rerun()
+    holding_cols = [
+        "Ticker", "Signal", "Shares", "Current Price", "Day %", "Avg Cost",
+        "Market Value", "Cost Basis", "P/L", "P/L %", "Weight %",
+        "Category", "Sector", "Industry",
+    ]
+    holding_cols = [c for c in holding_cols if c in e.columns]
+    for account_name in sorted(e["Account"].dropna().unique()) if "Account" in e else []:
+        sub = e[e["Account"] == account_name].copy()
+        if "Weight %" in sub and sub["Market Value"].sum():
+            sub["Weight %"] = sub["Market Value"] / sub["Market Value"].sum() * 100
+        header = f"{account_name}  ·  {money(sub['Market Value'].sum()) if 'Market Value' in sub else ''}  ·  {len(sub)} positions"
+        with st.expander(header, expanded=True):
+            sub_display = sub[holding_cols].sort_values("Weight %", ascending=False) if "Weight %" in sub else sub[holding_cols]
+            sub_style = style_signed_columns(sub_display, [c for c in ["Day %", "P/L", "P/L %"] if c in sub_display.columns])
+            st.dataframe(
+                sub_style,
+                use_container_width=True,
+                hide_index=True,
+                key=f"manual_holdings_table_{account_name}",
+                column_config={
+                    "Shares": st.column_config.NumberColumn(format="%.4f"),
+                    "Current Price": st.column_config.NumberColumn(format="$%.2f"),
+                    "Day %": st.column_config.NumberColumn(format="%+.2f%%"),
+                    "Avg Cost": st.column_config.NumberColumn(format="$%.2f"),
+                    "Market Value": st.column_config.NumberColumn(format="$%.2f"),
+                    "Cost Basis": st.column_config.NumberColumn(format="$%.2f"),
+                    "P/L": st.column_config.NumberColumn(format="$%.2f"),
+                    "P/L %": st.column_config.NumberColumn(format="%+.2f%%"),
+                    "Weight %": st.column_config.NumberColumn(format="%.1f%%"),
+                    "Category": st.column_config.Column("Strategy"),
+                },
+            )
+
+    with st.expander("종목 분류 편집 (Category/Sector) 및 삭제"):
+        display=e[[c for c in ["Account","Ticker","Signal","Shares","Avg Cost","Category","Sector","Industry","Current Price","Day %","Market Value","Cost Basis","P/L","P/L %","Weight %"] if c in e.columns]].copy()
+        edited=st.data_editor(
+            display,
+            use_container_width=True,
+            hide_index=True,
+            disabled=["Signal","Current Price","Day %","Market Value","Cost Basis","P/L","P/L %","Weight %"],
+            column_config={
+                "Category": st.column_config.SelectboxColumn("Strategy", options=STRATEGIES),
+                "Sector": st.column_config.SelectboxColumn("Sector", options=[x for x in SECTORS if x != "Auto detect"]),
+                "Shares": st.column_config.NumberColumn(format="%.4f"),
+                "Avg Cost": st.column_config.NumberColumn(format="$%.2f"),
+                "Current Price": st.column_config.NumberColumn(format="$%.2f"),
+                "Day %": st.column_config.NumberColumn(format="%+.2f%%"),
+                "Market Value": st.column_config.NumberColumn(format="$%.2f"),
+                "P/L": st.column_config.NumberColumn(format="$%.2f"),
+                "P/L %": st.column_config.NumberColumn(format="%+.2f%%"),
+                "Weight %": st.column_config.NumberColumn(format="%.2f%%"),
+            },
+            key="portfolio_holdings_editor",
+        )
+        if st.button("Save holdings edits"):
+            base=edited[["Account","Ticker","Shares","Avg Cost","Category","Sector","Industry"]].copy(); save_portfolio(base); st.rerun()
 
     with st.expander("Manage positions"):
         remove=st.multiselect("Delete positions", [f"{r.Account} · {r.Ticker}" for r in df.itertuples()])
