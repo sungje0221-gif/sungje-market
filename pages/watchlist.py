@@ -313,14 +313,12 @@ def render() -> None:
     with right_col:
         st.markdown("#### Watchlist")
         st.markdown('''<style>
-        .cl-row-link{display:block;text-decoration:none!important;color:inherit!important}
-        .cl-row{display:grid;grid-template-columns:1fr 95px;align-items:center;gap:8px;padding:9px 8px;border-bottom:1px solid #1d2f45;border-radius:8px}
-        .cl-row:hover{background:#0e1e30}
-        .cl-row-active{background:#152943;border:1px solid #3f6c9e}
-        .cl-ticker{font-size:13px;font-weight:850;color:#f4f8ff;display:block}.cl-tag{font-size:8px;color:#78aee8;letter-spacing:.6px;text-transform:uppercase}
-        .cl-vol{font-size:9px;color:#71869f;margin-top:2px;grid-column:1/2}
-        .cl-price-wrap{text-align:right}.cl-price{font-size:13px;font-weight:800;color:#fff;display:block}.cl-change{font-size:10px;font-weight:850;display:block;margin-top:1px}
-        .cl-spark{width:100%;height:20px;margin-top:4px;grid-column:1/-1}
+        .cl-row-box{padding:2px 4px 8px;border-bottom:1px solid #1d2f45}
+        .cl-price-line{display:flex;justify-content:space-between;align-items:baseline;padding:0 4px}
+        .cl-price{font-size:13px;font-weight:800;color:#fff}.cl-change{font-size:11px;font-weight:850}
+        .cl-vol{font-size:9px;color:#71869f;padding:0 4px;margin-top:1px}
+        .cl-spark{width:100%;height:20px;margin-top:2px}
+        div[data-testid="stVerticalBlockBorderWrapper"] button[kind="secondary"]{padding:2px 8px!important;min-height:0!important}
         </style>''', unsafe_allow_html=True)
         with st.container(height=640):
             for row in filtered:
@@ -332,18 +330,27 @@ def render() -> None:
                 color = _color(change)
                 spark = _sparkline_svg(histories.get(ticker, pd.DataFrame()), positive).replace('class="watch-spark"', 'class="cl-spark"').replace('class="watch-spark-empty"', 'class="cl-spark"')
                 pin = "★ " if row.get("pinned") else ""
-                href = f"?watch={ticker}"
-                active_cls = " cl-row-active" if ticker == selected else ""
-                st.markdown(f'''<a class="cl-row-link" href="{href}" target="_self">
-                <div class="cl-row{active_cls}">
-                  <div><span class="cl-ticker">{pin}{ticker}</span><span class="cl-tag">{row.get("tag", "Watch")}</span></div>
-                  <div class="cl-price-wrap">
+                is_active = ticker == selected
+                # A real Streamlit button -- clicking this only triggers an
+                # internal rerun (no browser page reload), so the scroll
+                # position and everything else on screen stays put; only the
+                # left detail panel's content changes.
+                if st.button(
+                    f"{'● ' if is_active else ''}{pin}{ticker}  ·  {row.get('tag', 'Watch')}",
+                    key=f"cl_select_{ticker}",
+                    use_container_width=True,
+                    type="primary" if is_active else "secondary",
+                ):
+                    st.session_state["watch_selected"] = ticker
+                    st.rerun()
+                st.markdown(f'''<div class="cl-row-box">
+                  <div class="cl-price-line">
                     <span class="cl-price">{money(q.get("price"))}</span>
                     <span class="cl-change" style="color:{color}">{"—" if change is None else f"{change:+.2f}%"}</span>
                   </div>
                   <div class="cl-vol">{"—" if day_change is None else f"{day_change:+.2f}"} · Vol {_fmt_volume(q.get("volume"))}</div>
                   {spark}
-                </div></a>''', unsafe_allow_html=True)
+                </div>''', unsafe_allow_html=True)
 
     with left_col:
         if selected and selected in tickers:
