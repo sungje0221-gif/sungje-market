@@ -701,10 +701,11 @@ def _portfolio_dashboard(e: pd.DataFrame, settings: dict, realized_pl: float = 0
                 )
                 user = f"규칙 기반 경고:\n{attention_text}\n\n비중 상위 보유종목:\n{holdings_text}\n\n리밸런싱 조언을 작성해줘."
                 with st.spinner("AI 조언 생성 중..."):
-                    st.session_state[f"ai_rebalance_text_{key_prefix}"] = _ai_ask(system, user, max_tokens=700)
+                    st.session_state[f"ai_rebalance_text_{key_prefix}"] = _ai_ask(system, user, max_tokens=1400)
                     st.session_state[f"ai_rebalance_key_{key_prefix}"] = attn_key
             if st.session_state.get(f"ai_rebalance_text_{key_prefix}"):
-                st.markdown(f'<div class="panel">{st.session_state[f"ai_rebalance_text_{key_prefix}"]}</div>', unsafe_allow_html=True)
+                with st.container(border=True):
+                    st.markdown(st.session_state[f"ai_rebalance_text_{key_prefix}"])
     with right:
         st.markdown("### Target vs Current")
         comp=pd.DataFrame({"Allocation":["Invested","Cash"],"Current %":[100-cash_pct,cash_pct],"Target %":[100-target_cash,target_cash]})

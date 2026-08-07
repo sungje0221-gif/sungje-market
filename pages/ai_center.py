@@ -216,9 +216,10 @@ def _detail(ticker: str) -> None:
                 f"지표 요약:\n{narrative_text}\n\n최근 뉴스 헤드라인:\n{headlines}\n\n코멘터리를 작성해줘."
             )
             with st.spinner("AI 코멘터리 생성 중..."):
-                st.session_state[f"ai_comment_{ticker}"] = ask(system, user, max_tokens=600)
+                st.session_state[f"ai_comment_{ticker}"] = ask(system, user, max_tokens=900)
         if st.session_state.get(f"ai_comment_{ticker}"):
-            st.markdown(f'<div class="panel">{st.session_state[f"ai_comment_{ticker}"]}</div>', unsafe_allow_html=True)
+            with st.container(border=True):
+                st.markdown(st.session_state[f"ai_comment_{ticker}"])
 
 
 @st.cache_data(ttl=300, show_spinner=False)
@@ -339,6 +340,7 @@ def render() -> None:
                 )
                 user = f"보유 종목 (Schwab):\n{portfolio_text}\n\nWatchlist 신호 요약:\n{movers_text}\n\n종합 리포트를 작성해줘."
                 with st.spinner("종합 리포트 생성 중..."):
-                    st.session_state["ai_full_report_text"] = _ai_ask(system, user, max_tokens=1200)
+                    st.session_state["ai_full_report_text"] = _ai_ask(system, user, max_tokens=1800)
             if st.session_state.get("ai_full_report_text"):
-                st.markdown(f'<div class="panel">{st.session_state["ai_full_report_text"]}</div>', unsafe_allow_html=True)
+                with st.container(border=True):
+                    st.markdown(st.session_state["ai_full_report_text"])

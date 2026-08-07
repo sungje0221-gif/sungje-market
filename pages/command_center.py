@@ -203,11 +203,12 @@ def _ai_briefing_section(state: str, market_score: float, watch_items: list) -> 
                 "확실하지 않은 건 단정하지 말 것."
             )
             user = f"시장 국면: {state}\n추세 점수: {market_score:.0f}/100\n\nWatchlist 주요 변동:\n{movers_text}\n\n오늘 아침 브리핑을 작성해줘."
-            st.session_state["briefing_text"] = ask(system, user, max_tokens=700)
+            st.session_state["briefing_text"] = ask(system, user, max_tokens=1000)
             st.session_state["briefing_cache_key"] = cache_key
 
     if st.session_state.get("briefing_text"):
-        st.markdown(f'<div class="panel">{st.session_state["briefing_text"]}</div>', unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown(st.session_state["briefing_text"])
     col_note.caption("1시간 캐시 · 규칙 기반 지표만 근거로 사용 · 투자 조언 아님")
 
 

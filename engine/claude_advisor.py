@@ -49,7 +49,10 @@ def ask(system: str, user: str, max_tokens: int = 900, model: str = MODEL) -> st
         response.raise_for_status()
         data = response.json()
         parts = [block.get("text", "") for block in data.get("content", []) if block.get("type") == "text"]
-        return "".join(parts).strip() or "응답을 받지 못했습니다."
+        text = "".join(parts).strip() or "응답을 받지 못했습니다."
+        if data.get("stop_reason") == "max_tokens":
+            text += "\n\n_(응답이 길이 제한으로 중간에 잘렸을 수 있습니다.)_"
+        return text
     except requests.exceptions.HTTPError as exc:
         detail = ""
         try:
@@ -86,7 +89,10 @@ def chat(system: str, history: list[dict], max_tokens: int = 900, model: str = M
         response.raise_for_status()
         data = response.json()
         parts = [block.get("text", "") for block in data.get("content", []) if block.get("type") == "text"]
-        return "".join(parts).strip() or "응답을 받지 못했습니다."
+        text = "".join(parts).strip() or "응답을 받지 못했습니다."
+        if data.get("stop_reason") == "max_tokens":
+            text += "\n\n_(응답이 길이 제한으로 중간에 잘렸을 수 있습니다.)_"
+        return text
     except requests.exceptions.HTTPError as exc:
         detail = ""
         try:

@@ -109,9 +109,10 @@ def _detail(ticker: str, records: list[dict]) -> None:
                 f"52주 최저: {week52_low}\n52주 최고: {week52_high}\n목표가를 제안해줘."
             )
             with st.spinner("AI 목표가 계산 중..."):
-                st.session_state[f"ai_target_text_{ticker}"] = _ai_ask(system, user, max_tokens=400)
+                st.session_state[f"ai_target_text_{ticker}"] = _ai_ask(system, user, max_tokens=600)
         if st.session_state.get(f"ai_target_text_{ticker}"):
-            st.markdown(f'<div class="panel">{st.session_state[f"ai_target_text_{ticker}"]}</div>', unsafe_allow_html=True)
+            with st.container(border=True):
+                st.markdown(st.session_state[f"ai_target_text_{ticker}"])
 
     range_stats = st.columns(4)
     range_stats[0].metric("52W High", money(info.get("fiftyTwoWeekHigh")))
