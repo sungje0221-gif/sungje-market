@@ -101,18 +101,25 @@ def inject_theme() -> None:
         .chip{display:inline-block;padding:5px 9px;border-radius:999px;margin-right:5px;margin-top:8px;
           background:rgba(59,130,246,.12);border:1px solid rgba(96,165,250,.2);font-size:10px;}
         div[data-testid="stMetric"] {background:linear-gradient(180deg,rgba(15,32,53,.98),rgba(8,20,34,.98));
-          border:1px solid var(--os-border);padding:14px;border-radius:14px;
-          display:grid; grid-template-columns:1fr auto; align-items:baseline; row-gap:2px;}
+          border:1px solid var(--os-border);padding:14px;border-radius:14px;}
         /* Some metrics in a row have a delta (e.g. "-4.98%") and some don't.
            st.metric() stacks label -> value -> delta vertically by default,
-           so rows with a delta end up taller than rows without one. Placing
-           value and delta as explicit grid areas puts them on the same
-           line (delta pinned to the right edge) instead of stacking, so
-           every card in a row is the same height regardless of whether its
-           delta is present. */
-        div[data-testid="stMetric"] [data-testid="stMetricLabel"] { grid-column: 1 / -1; }
-        div[data-testid="stMetric"] [data-testid="stMetricValue"] { grid-column: 1; }
-        div[data-testid="stMetric"] [data-testid="stMetricDelta"] { grid-column: 2; justify-self: end; margin: 0 !important; }
+           so rows with a delta end up taller than rows without one. The
+           actual label/value/delta elements are children of a single inner
+           wrapper div (confirmed via DevTools), not direct children of
+           [data-testid="stMetric"] itself -- so the grid has to go on that
+           inner wrapper (stMetric's only direct child) to have any effect.
+           Value and delta share row 2, delta pinned to the right edge,
+           instead of stacking, so every card in a row is the same height
+           regardless of whether its delta is present. */
+        div[data-testid="stMetric"] > div {
+          display: grid; grid-template-columns: 1fr auto; align-items: baseline; row-gap: 2px;
+        }
+        div[data-testid="stMetric"] > div > [data-testid="stMetricLabel"] { grid-column: 1 / -1; }
+        div[data-testid="stMetric"] > div > [data-testid="stMetricValue"] { grid-column: 1; }
+        div[data-testid="stMetric"] > div > div:has([data-testid="stMetricDelta"]) {
+          grid-column: 2; justify-self: end; align-self: baseline; margin: 0 !important;
+        }
         div[data-testid="stDataFrame"]{border:1px solid var(--os-border);border-radius:14px;overflow:hidden;}
         button[kind="primary"]{border-radius:10px;}
         .delta-up{color:#4DA3FF;font-weight:750}.delta-down{color:#FF6474;font-weight:750}
