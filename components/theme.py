@@ -109,16 +109,19 @@ def inject_theme() -> None:
            wrapper div (confirmed via DevTools), not direct children of
            [data-testid="stMetric"] itself -- so the grid has to go on that
            inner wrapper (stMetric's only direct child) to have any effect.
-           Value and delta share row 2, delta pinned to the right edge,
-           instead of stacking, so every card in a row is the same height
-           regardless of whether its delta is present. */
+           Putting the delta next to the *value* clipped it on wide numbers
+           (e.g. "$90,582.02") since there wasn't enough leftover width. The
+           label row has much more spare room, so the delta goes there
+           instead, right-aligned; the value gets the full box width on its
+           own row below. */
         div[data-testid="stMetric"] > div {
-          display: grid !important; grid-template-columns: 1fr auto !important; align-items: baseline !important; row-gap: 2px !important;
+          display: grid !important; grid-template-columns: 1fr auto !important;
+          grid-template-rows: auto auto !important; align-items: center !important; row-gap: 2px !important;
         }
-        div[data-testid="stMetric"] > div > [data-testid="stMetricLabel"] { grid-column: 1 / -1 !important; }
-        div[data-testid="stMetric"] > div > [data-testid="stMetricValue"] { grid-column: 1 !important; }
+        div[data-testid="stMetric"] > div > [data-testid="stMetricLabel"] { grid-column: 1 !important; grid-row: 1 !important; }
+        div[data-testid="stMetric"] > div > [data-testid="stMetricValue"] { grid-column: 1 / -1 !important; grid-row: 2 !important; }
         div[data-testid="stMetric"] > div > div:has([data-testid="stMetricDelta"]) {
-          grid-column: 2 !important; justify-self: end !important; align-self: baseline !important; margin: 0 !important;
+          grid-column: 2 !important; grid-row: 1 !important; justify-self: end !important; align-self: center !important; margin: 0 !important;
         }
         div[data-testid="stDataFrame"]{border:1px solid var(--os-border);border-radius:14px;overflow:hidden;}
         button[kind="primary"]{border-radius:10px;}
