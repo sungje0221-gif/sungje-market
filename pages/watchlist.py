@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from urllib.parse import quote
-
 import pandas as pd
 import streamlit as st
 
@@ -239,7 +237,7 @@ def _mover_table(rows: list[dict], quotes: dict[str, dict]) -> None:
 def render() -> None:
     st.title("Watchlist")
     mode, source = storage_status()
-    st.caption(f"{mode} · {source} · Movers 표와 compact card를 함께 제공합니다.")
+    st.caption(f"{mode} · {source} · Movers 표 + 종목 리스트/상세 화면을 함께 제공합니다.")
     records = load_watchlist_data(DEFAULT)
     tickers = [r["ticker"] for r in records]
 
@@ -256,22 +254,13 @@ def render() -> None:
             else:
                 st.info(f"{new} is already in the watchlist.")
 
-    toolbar = st.columns([2, 1, 1, 1])
+    toolbar = st.columns([2, 1, 1])
     search = toolbar[0].text_input("Search", placeholder="Ticker or memo", label_visibility="collapsed").strip().lower()
     tag_filter = toolbar[1].selectbox("Tag", ["All"] + TAGS, label_visibility="collapsed")
     sort_by = toolbar[2].selectbox(
         "Sort",
         ["Biggest losers", "Biggest gainers", "Largest move", "Pinned", "Ticker"],
         label_visibility="collapsed",
-    )
-    view_options = ["Table + Cards", "Table only", "Cards only", "Compact List"]
-    pending_view = st.session_state.pop("watch_view_pending", None)
-    if pending_view in view_options:
-        st.session_state["watch_view_select"] = pending_view
-    elif "watch_view_select" not in st.session_state:
-        st.session_state["watch_view_select"] = "Table + Cards"
-    view = toolbar[3].selectbox(
-        "View", view_options, key="watch_view_select", label_visibility="collapsed",
     )
 
     filtered = [
@@ -292,136 +281,73 @@ def render() -> None:
     else:
         filtered.sort(key=lambda r: r["ticker"])
 
-    if view in ("Table + Cards", "Table only"):
-        st.markdown("### Daily Movers")
-        st.caption("기본적으로 가장 많이 내린 종목부터 정렬됩니다. 위 Sort 메뉴에서 바로 변경할 수 있습니다.")
-        _mover_table(filtered, quotes)
-        st.markdown("#### 종목 삭제")
-        remove_col1, remove_col2 = st.columns([3, 1])
-        to_remove = remove_col1.multiselect(
-            "삭제할 종목 선택",
-            [r["ticker"] for r in filtered],
-            key="watch_bulk_remove_select",
-        )
-        if remove_col2.button("삭제하기", type="primary", disabled=not to_remove, key="watch_bulk_remove_btn"):
-            for ticker in to_remove:
-                delete_watchlist_item(ticker, records)
-            st.session_state.pop("watch_selected", None)
-            st.rerun()
+    st.markdown("### Daily Movers")
+    st.caption("기본적으로 가장 많이 내린 종목부터 정렬됩니다. 위 Sort 메뉴에서 바로 변경할 수 있습니다.")
+    _mover_table(filtered, quotes)
+    st.markdown("#### 종목 삭제")
+    remove_col1, remove_col2 = st.columns([3, 1])
+    to_remove = remove_col1.multiselect(
+        "삭제할 종목 선택",
+        [r["ticker"] for r in filtered],
+        key="watch_bulk_remove_select",
+    )
+    if remove_col2.button("삭제하기", type="primary", disabled=not to_remove, key="watch_bulk_remove_btn"):
+        for ticker in to_remove:
+            delete_watchlist_item(ticker, records)
+        st.session_state.pop("watch_selected", None)
+        st.rerun()
 
-    if view in ("Table + Cards", "Cards only"):
-        st.markdown("### My Investment Cards")
-        st.caption("카드 아무 곳이나 누르면 상세 화면이 열립니다. 미니 차트는 실제 최근 30거래일 종가이며, 점수는 추세·20일 모멘텀·RSI·MACD 기반 규칙 점수입니다.")
+    st.divider()
 
-        histories = batch_history(tuple(r["ticker"] for r in filtered), period="6mo", interval="1d")
-        analytics = {ticker: analyze(histories.get(ticker, pd.DataFrame())) for ticker in (r["ticker"] for r in filtered)}
+    selected = (
+        st.query_params.get("watch")
+        or st.session_state.get("watch_selected")
+        or (filtered[0]["ticker"] if filtered else None)
+    )
+    if selected in tickers:
+        st.session_state["watch_selected"] = selected
 
-        selected = st.query_params.get("watch") or st.session_state.get("watch_selected")
+    histories = batch_history(tuple(r["ticker"] for r in filtered), period="1mo", interval="1d")
+    left_col, right_col = st.columns([2.3, 1], gap="medium")
+
+    with right_col:
+        st.markdown("#### Watchlist")
         st.markdown('''<style>
-        .watch-card-link{display:block;text-decoration:none!important;color:inherit!important;margin-bottom:10px}
-        .watch-card-v310{background:#0d1c2e;border:1px solid #263b54;border-radius:11px;padding:12px 13px 10px;min-height:176px;transition:all .14s ease;box-shadow:0 1px 0 rgba(255,255,255,.02)}
-        .watch-card-v310:hover{transform:translateY(-2px);border-color:#4d78aa;background:#10233a;box-shadow:0 7px 18px rgba(0,0,0,.20)}
-        .wc-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px}.wc-ticker{font-size:15px;font-weight:850;color:#f4f8ff}.wc-tag{font-size:8px;letter-spacing:.7px;color:#78aee8;text-transform:uppercase}
-        .wc-main{display:flex;justify-content:space-between;align-items:baseline}.wc-price{font-size:20px;font-weight:800;color:#fff}.wc-change{font-size:13px;font-weight:850}
-        .wc-range{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:8px;font-size:10px;color:#8297af}.wc-range b{display:block;margin-top:1px;color:#cdd9e8;font-size:11px}
-        .watch-spark{width:100%;height:38px;margin:7px 0 4px}.watch-spark-empty{height:38px;display:flex;align-items:center;justify-content:center;color:#61758e}
-        .wc-footer{display:flex;justify-content:space-between;align-items:center;border-top:1px solid #20344b;padding-top:7px}.wc-ai{font-size:10px;color:#8fa4bb}.wc-ai b{color:#e9f1fb;font-size:12px}.wc-action{font-size:10px;font-weight:900;border:1px solid #38526f;border-radius:999px;padding:3px 7px;color:#dcecff}
-        .wc-volume{font-size:9px;color:#71869f;margin-top:3px}.wc-signal{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:4px;font-size:9px;color:#71869f}.wc-signal b{display:block;color:#cdd9e8;font-size:10px;margin-top:1px}.wc-source{font-size:8px;color:#60758e;margin-top:5px;text-align:right}
+        .cl-row-link{display:block;text-decoration:none!important;color:inherit!important}
+        .cl-row{display:grid;grid-template-columns:1fr 95px;align-items:center;gap:8px;padding:9px 8px;border-bottom:1px solid #1d2f45;border-radius:8px}
+        .cl-row:hover{background:#0e1e30}
+        .cl-row-active{background:#152943;border:1px solid #3f6c9e}
+        .cl-ticker{font-size:13px;font-weight:850;color:#f4f8ff;display:block}.cl-tag{font-size:8px;color:#78aee8;letter-spacing:.6px;text-transform:uppercase}
+        .cl-vol{font-size:9px;color:#71869f;margin-top:2px;grid-column:1/2}
+        .cl-price-wrap{text-align:right}.cl-price{font-size:13px;font-weight:800;color:#fff;display:block}.cl-change{font-size:10px;font-weight:850;display:block;margin-top:1px}
+        .cl-spark{width:100%;height:20px;margin-top:4px;grid-column:1/-1}
         </style>''', unsafe_allow_html=True)
-
-        for start in range(0, len(filtered), 5):
-            cols = st.columns(5, gap="small")
-            for col, row in zip(cols, filtered[start:start + 5]):
+        with st.container(height=640):
+            for row in filtered:
                 ticker = row["ticker"]
                 q = quotes.get(ticker, {})
                 change = q.get("change_pct")
+                day_change = q.get("change_abs")
                 positive = bool(change is not None and change >= 0)
                 color = _color(change)
-                analysis = analytics.get(ticker, {})
-                score = analysis.get("score")
-                action = str(analysis.get("action", "NO DATA") or "NO DATA").upper()
-                rsi_value = analysis.get("rsi")
-                return_20d = analysis.get("return_20d")
+                spark = _sparkline_svg(histories.get(ticker, pd.DataFrame()), positive).replace('class="watch-spark"', 'class="cl-spark"').replace('class="watch-spark-empty"', 'class="cl-spark"')
                 pin = "★ " if row.get("pinned") else ""
-                spark = _sparkline_svg(histories.get(ticker, pd.DataFrame()), positive)
-                day_change = q.get("change_abs")
-                href = f"?watch={ticker}&amp;view={quote(view)}"
-                with col:
-                    top_l, top_r = st.columns([3, 2])
-                    with top_r:
-                        if st.button("✕ 삭제", key=f"watch_del_{ticker}"):
-                            delete_watchlist_item(ticker, records)
-                            st.session_state.pop("watch_selected", None)
-                            st.rerun()
-                    st.markdown(f'''<a class="watch-card-link" href="{href}" target="_self">
-                    <div class="watch-card-v310">
-                      <div class="wc-head"><span class="wc-ticker">{pin}{ticker}</span><span class="wc-tag">{row.get("tag", "Watch")}</span></div>
-                      <div class="wc-main"><span class="wc-price">{money(q.get("price"))}</span><span class="wc-change" style="color:{color}">{"—" if change is None else f"{change:+.2f}%"}</span></div>
-                      <div class="wc-volume">Day change {"—" if day_change is None else f"${day_change:+.2f}"} · Vol {_fmt_volume(q.get("volume"))}</div>
-                      {spark}
-                      <div class="wc-range"><span>LOW<b>{money(q.get("day_low"))}</b></span><span>HIGH<b>{money(q.get("day_high"))}</b></span></div>
-                      <div class="wc-signal"><span>20D RETURN<b>{"—" if return_20d is None else f"{return_20d:+.1f}%"}</b></span><span>RSI 14<b>{"—" if rsi_value is None else f"{rsi_value:.0f}"}</b></span></div>
-                      <div class="wc-footer"><span class="wc-ai">RULE SCORE <b>{"—" if score is None else f"{score:.0f}"}</b></span><span class="wc-action">{action}</span></div>
-                      <div class="wc-source">Chart: actual last 30 closes · no random data</div>
-                    </div></a>''', unsafe_allow_html=True)
+                href = f"?watch={ticker}"
+                active_cls = " cl-row-active" if ticker == selected else ""
+                st.markdown(f'''<a class="cl-row-link" href="{href}" target="_self">
+                <div class="cl-row{active_cls}">
+                  <div><span class="cl-ticker">{pin}{ticker}</span><span class="cl-tag">{row.get("tag", "Watch")}</span></div>
+                  <div class="cl-price-wrap">
+                    <span class="cl-price">{money(q.get("price"))}</span>
+                    <span class="cl-change" style="color:{color}">{"—" if change is None else f"{change:+.2f}%"}</span>
+                  </div>
+                  <div class="cl-vol">{"—" if day_change is None else f"{day_change:+.2f}"} · Vol {_fmt_volume(q.get("volume"))}</div>
+                  {spark}
+                </div></a>''', unsafe_allow_html=True)
 
-    if view == "Compact List":
-        selected = (
-            st.query_params.get("watch")
-            or st.session_state.get("watch_selected")
-            or (filtered[0]["ticker"] if filtered else None)
-        )
-        if selected in tickers:
-            st.session_state["watch_selected"] = selected
-
-        histories = batch_history(tuple(r["ticker"] for r in filtered), period="1mo", interval="1d")
-        left_col, right_col = st.columns([2.3, 1], gap="medium")
-
-        with right_col:
-            st.markdown("#### Watchlist")
-            st.markdown('''<style>
-            .cl-row-link{display:block;text-decoration:none!important;color:inherit!important}
-            .cl-row{display:grid;grid-template-columns:1fr 95px;align-items:center;gap:8px;padding:9px 8px;border-bottom:1px solid #1d2f45;border-radius:8px}
-            .cl-row:hover{background:#0e1e30}
-            .cl-row-active{background:#152943;border:1px solid #3f6c9e}
-            .cl-ticker{font-size:13px;font-weight:850;color:#f4f8ff;display:block}.cl-tag{font-size:8px;color:#78aee8;letter-spacing:.6px;text-transform:uppercase}
-            .cl-vol{font-size:9px;color:#71869f;margin-top:2px;grid-column:1/2}
-            .cl-price-wrap{text-align:right}.cl-price{font-size:13px;font-weight:800;color:#fff;display:block}.cl-change{font-size:10px;font-weight:850;display:block;margin-top:1px}
-            .cl-spark{width:100%;height:20px;margin-top:4px;grid-column:1/-1}
-            </style>''', unsafe_allow_html=True)
-            with st.container(height=640):
-                for row in filtered:
-                    ticker = row["ticker"]
-                    q = quotes.get(ticker, {})
-                    change = q.get("change_pct")
-                    day_change = q.get("change_abs")
-                    positive = bool(change is not None and change >= 0)
-                    color = _color(change)
-                    spark = _sparkline_svg(histories.get(ticker, pd.DataFrame()), positive).replace('class="watch-spark"', 'class="cl-spark"').replace('class="watch-spark-empty"', 'class="cl-spark"')
-                    pin = "★ " if row.get("pinned") else ""
-                    href = f"?watch={ticker}&amp;view={quote(view)}"
-                    active_cls = " cl-row-active" if ticker == selected else ""
-                    st.markdown(f'''<a class="cl-row-link" href="{href}" target="_self">
-                    <div class="cl-row{active_cls}">
-                      <div><span class="cl-ticker">{pin}{ticker}</span><span class="cl-tag">{row.get("tag", "Watch")}</span></div>
-                      <div class="cl-price-wrap">
-                        <span class="cl-price">{money(q.get("price"))}</span>
-                        <span class="cl-change" style="color:{color}">{"—" if change is None else f"{change:+.2f}%"}</span>
-                      </div>
-                      <div class="cl-vol">{"—" if day_change is None else f"{day_change:+.2f}"} · Vol {_fmt_volume(q.get("volume"))}</div>
-                      {spark}
-                    </div></a>''', unsafe_allow_html=True)
-
-        with left_col:
-            if selected and selected in tickers:
-                _detail(selected, records)
-            else:
-                st.info("오른쪽 목록에서 종목을 선택하세요.")
-        return
-
-    selected = st.query_params.get("watch") or st.session_state.get("watch_selected")
-    if selected and selected in tickers:
-        st.session_state["watch_selected"] = selected
-        st.divider()
-        _detail(selected, records)
+    with left_col:
+        if selected and selected in tickers:
+            _detail(selected, records)
+        else:
+            st.info("오른쪽 목록에서 종목을 선택하세요.")
 
