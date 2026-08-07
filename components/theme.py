@@ -113,12 +113,12 @@ def inject_theme() -> None:
            instead of stacking, so every card in a row is the same height
            regardless of whether its delta is present. */
         div[data-testid="stMetric"] > div {
-          display: grid; grid-template-columns: 1fr auto; align-items: baseline; row-gap: 2px;
+          display: grid !important; grid-template-columns: 1fr auto !important; align-items: baseline !important; row-gap: 2px !important;
         }
-        div[data-testid="stMetric"] > div > [data-testid="stMetricLabel"] { grid-column: 1 / -1; }
-        div[data-testid="stMetric"] > div > [data-testid="stMetricValue"] { grid-column: 1; }
+        div[data-testid="stMetric"] > div > [data-testid="stMetricLabel"] { grid-column: 1 / -1 !important; }
+        div[data-testid="stMetric"] > div > [data-testid="stMetricValue"] { grid-column: 1 !important; }
         div[data-testid="stMetric"] > div > div:has([data-testid="stMetricDelta"]) {
-          grid-column: 2; justify-self: end; align-self: baseline; margin: 0 !important;
+          grid-column: 2 !important; justify-self: end !important; align-self: baseline !important; margin: 0 !important;
         }
         div[data-testid="stDataFrame"]{border:1px solid var(--os-border);border-radius:14px;overflow:hidden;}
         button[kind="primary"]{border-radius:10px;}
