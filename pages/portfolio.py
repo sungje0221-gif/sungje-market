@@ -480,6 +480,11 @@ def schwab_portfolio():
     positions["Day Change $"] = positions.apply(_day_change_dollar, axis=1)
     positions["Weight %"] = positions["Market Value"] / positions["Market Value"].sum() * 100 if positions["Market Value"].sum() else 0
 
+    from pages.ai_center import _radar as _ai_radar
+    equity_only = tuple(t for t in positions["Ticker"].dropna().unique() if " " not in str(t) and str(t).isascii())
+    signal_map = _ai_radar(equity_only).set_index("Ticker")["Signal"].to_dict() if equity_only else {}
+    positions["Signal"] = positions["Ticker"].map(signal_map).fillna("—")
+
     dashboard_df = positions.rename(columns={
         "Unrealized P/L": "P/L",
         "Unrealized P/L %": "P/L %",
@@ -515,7 +520,7 @@ def schwab_portfolio():
     st.divider()
     st.markdown("### Positions by Account")
     position_cols = [
-        "Ticker", "Shares", "Current Price", "Day %", "Day Change $", "Weight %",
+        "Ticker", "Signal", "Shares", "Current Price", "Day %", "Day Change $", "Weight %",
         "Description", "Avg Cost", "Market Value", "Unrealized P/L", "Unrealized P/L %",
         "Sector", "Category",
     ]
@@ -775,14 +780,18 @@ def manual_portfolio():
         save_portfolio(updated); st.rerun()
 
     e = enrich(df)
+    from pages.ai_center import _radar as _ai_radar_manual
+    equity_only_manual = tuple(t for t in e["Ticker"].dropna().unique() if " " not in str(t) and str(t).isascii())
+    signal_map_manual = _ai_radar_manual(equity_only_manual).set_index("Ticker")["Signal"].to_dict() if equity_only_manual else {}
+    e["Signal"] = e["Ticker"].map(signal_map_manual).fillna("—")
     _portfolio_dashboard(e, settings, _realized_pl_total(), key_prefix="manual")
     st.markdown("### Holdings")
-    display=e[[c for c in ["Account","Ticker","Shares","Avg Cost","Category","Sector","Industry","Current Price","Day %","Market Value","Cost Basis","P/L","P/L %","Weight %"] if c in e.columns]].copy()
+    display=e[[c for c in ["Account","Ticker","Signal","Shares","Avg Cost","Category","Sector","Industry","Current Price","Day %","Market Value","Cost Basis","P/L","P/L %","Weight %"] if c in e.columns]].copy()
     edited=st.data_editor(
         display,
         use_container_width=True,
         hide_index=True,
-        disabled=["Current Price","Day %","Market Value","Cost Basis","P/L","P/L %","Weight %"],
+        disabled=["Signal","Current Price","Day %","Market Value","Cost Basis","P/L","P/L %","Weight %"],
         column_config={
             "Category": st.column_config.SelectboxColumn("Strategy", options=STRATEGIES),
             "Sector": st.column_config.SelectboxColumn("Sector", options=[x for x in SECTORS if x != "Auto detect"]),
