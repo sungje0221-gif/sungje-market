@@ -333,11 +333,10 @@ def render() -> None:
     with right_col:
         st.markdown("#### Watchlist")
         st.markdown('''<style>
-        .cl-row-box{padding:2px 4px 8px;border-bottom:1px solid #1d2f45}
-        .cl-price-line{display:flex;justify-content:space-between;align-items:baseline;padding:0 4px}
-        .cl-price{font-size:13px;font-weight:800;color:#fff}.cl-change{font-size:11px;font-weight:850}
-        .cl-vol{font-size:9px;color:#71869f;padding:0 4px;margin-top:1px}
-        .cl-spark{width:100%;height:30px;margin-top:3px}
+        .cl-row-box{display:grid;grid-template-columns:1fr 74px;gap:8px;align-items:center;padding:2px 4px 8px;border-bottom:1px solid #1d2f45}
+        .cl-price{font-size:13px;font-weight:800;color:#fff}.cl-change{font-size:11px;font-weight:850;margin-left:6px}
+        .cl-vol{font-size:9px;color:#71869f;margin-top:1px}
+        .cl-spark{width:74px;height:30px;overflow:visible}
         div[data-testid="stVerticalBlockBorderWrapper"] button[kind="secondary"]{padding:2px 8px!important;min-height:0!important}
         </style>''', unsafe_allow_html=True)
         with st.container(height=640):
@@ -364,11 +363,10 @@ def render() -> None:
                     st.session_state["watch_selected"] = ticker
                     st.rerun()
                 st.markdown(f'''<div class="cl-row-box">
-                  <div class="cl-price-line">
-                    <span class="cl-price">{money(q.get("price"))}</span>
-                    <span class="cl-change" style="color:{color}">{"—" if change is None else f"{change:+.2f}%"}</span>
+                  <div>
+                    <span class="cl-price">{money(q.get("price"))}</span><span class="cl-change" style="color:{color}">{"—" if change is None else f"{change:+.2f}%"}</span>
+                    <div class="cl-vol">{"—" if day_change is None else f"{day_change:+.2f}"} · Vol {_fmt_volume(q.get("volume"))}</div>
                   </div>
-                  <div class="cl-vol">{"—" if day_change is None else f"{day_change:+.2f}"} · Vol {_fmt_volume(q.get("volume"))}</div>
                   {spark}
                 </div>''', unsafe_allow_html=True)
 
