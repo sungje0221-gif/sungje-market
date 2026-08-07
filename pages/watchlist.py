@@ -336,36 +336,55 @@ def render() -> None:
                     </div></a>''', unsafe_allow_html=True)
 
     if view == "Compact List":
-        st.markdown("### Watchlist")
-        st.caption("가격/등락/미니차트만 빠르게 훑어보는 모바일 친화 리스트입니다. 행을 누르면 상세 화면이 열립니다.")
+        selected = (
+            st.query_params.get("watch")
+            or st.session_state.get("watch_selected")
+            or (filtered[0]["ticker"] if filtered else None)
+        )
+        if selected in tickers:
+            st.session_state["watch_selected"] = selected
+
         histories = batch_history(tuple(r["ticker"] for r in filtered), period="1mo", interval="1d")
-        st.markdown('''<style>
-        .cl-row-link{display:block;text-decoration:none!important;color:inherit!important}
-        .cl-row{display:grid;grid-template-columns:1fr 90px 110px;align-items:center;gap:10px;padding:10px 6px;border-bottom:1px solid #1d2f45}
-        .cl-row:hover{background:#0e1e30}
-        .cl-ticker{font-size:14px;font-weight:850;color:#f4f8ff}.cl-tag{font-size:8px;color:#78aee8;margin-left:6px;letter-spacing:.6px;text-transform:uppercase}
-        .cl-price-wrap{text-align:right}.cl-price{font-size:14px;font-weight:800;color:#fff;display:block}.cl-change{font-size:11px;font-weight:850;display:block;margin-top:1px}
-        .cl-spark{width:100%;height:28px}
-        </style>''', unsafe_allow_html=True)
-        for row in filtered:
-            ticker = row["ticker"]
-            q = quotes.get(ticker, {})
-            change = q.get("change_pct")
-            day_change = q.get("change_abs")
-            positive = bool(change is not None and change >= 0)
-            color = _color(change)
-            spark = _sparkline_svg(histories.get(ticker, pd.DataFrame()), positive).replace('class="watch-spark"', 'class="cl-spark"').replace('class="watch-spark-empty"', 'class="cl-spark"')
-            pin = "★ " if row.get("pinned") else ""
-            href = f"?watch={ticker}"
-            st.markdown(f'''<a class="cl-row-link" href="{href}" target="_self">
-            <div class="cl-row">
-              <div><span class="cl-ticker">{pin}{ticker}</span><span class="cl-tag">{row.get("tag", "Watch")}</span></div>
-              <div class="cl-price-wrap">
-                <span class="cl-price">{money(q.get("price"))}</span>
-                <span class="cl-change" style="color:{color}">{"—" if change is None else f"{change:+.2f}%"}{"" if day_change is None else f" ({day_change:+.2f})"}</span>
-              </div>
-              {spark}
-            </div></a>''', unsafe_allow_html=True)
+        left_col, right_col = st.columns([2.3, 1], gap="medium")
+
+        with right_col:
+            st.markdown("#### Watchlist")
+            st.markdown('''<style>
+            .cl-row-link{display:block;text-decoration:none!important;color:inherit!important}
+            .cl-row{display:grid;grid-template-columns:1fr 90px;align-items:center;gap:8px;padding:9px 8px;border-bottom:1px solid #1d2f45;border-radius:8px}
+            .cl-row:hover{background:#0e1e30}
+            .cl-row-active{background:#152943;border:1px solid #3f6c9e}
+            .cl-ticker{font-size:13px;font-weight:850;color:#f4f8ff;display:block}.cl-tag{font-size:8px;color:#78aee8;letter-spacing:.6px;text-transform:uppercase}
+            .cl-price-wrap{text-align:right}.cl-price{font-size:13px;font-weight:800;color:#fff;display:block}.cl-change{font-size:10px;font-weight:850;display:block;margin-top:1px}
+            .cl-spark{width:100%;height:22px;margin-top:4px;grid-column:1/-1}
+            </style>''', unsafe_allow_html=True)
+            for row in filtered:
+                ticker = row["ticker"]
+                q = quotes.get(ticker, {})
+                change = q.get("change_pct")
+                day_change = q.get("change_abs")
+                positive = bool(change is not None and change >= 0)
+                color = _color(change)
+                spark = _sparkline_svg(histories.get(ticker, pd.DataFrame()), positive).replace('class="watch-spark"', 'class="cl-spark"').replace('class="watch-spark-empty"', 'class="cl-spark"')
+                pin = "★ " if row.get("pinned") else ""
+                href = f"?watch={ticker}"
+                active_cls = " cl-row-active" if ticker == selected else ""
+                st.markdown(f'''<a class="cl-row-link" href="{href}" target="_self">
+                <div class="cl-row{active_cls}">
+                  <div><span class="cl-ticker">{pin}{ticker}</span><span class="cl-tag">{row.get("tag", "Watch")}</span></div>
+                  <div class="cl-price-wrap">
+                    <span class="cl-price">{money(q.get("price"))}</span>
+                    <span class="cl-change" style="color:{color}">{"—" if change is None else f"{change:+.2f}%"}</span>
+                  </div>
+                  {spark}
+                </div></a>''', unsafe_allow_html=True)
+
+        with left_col:
+            if selected and selected in tickers:
+                _detail(selected, records)
+            else:
+                st.info("오른쪽 목록에서 종목을 선택하세요.")
+        return
 
     selected = st.query_params.get("watch") or st.session_state.get("watch_selected")
     if selected and selected in tickers:
