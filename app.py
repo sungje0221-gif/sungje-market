@@ -32,7 +32,7 @@ if st.query_params.get("watch"):
     st.session_state["os_page"] = "Watchlist"
     st.session_state["watch_selected"] = st.query_params.get("watch")
     if st.query_params.get("view"):
-        st.session_state["watch_view"] = st.query_params.get("view")
+        st.session_state["watch_view_pending"] = st.query_params.get("view")
     st.query_params.clear()
 
 page = render_sidebar()
