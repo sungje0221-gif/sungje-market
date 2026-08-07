@@ -247,58 +247,42 @@ def _add_to_watchlist(ticker: str) -> None:
         st.toast(f"{ticker}는 이미 Watchlist에 있습니다")
 
 
+def _portfolio_snapshot_text() -> str:
+    """Best-effort summary of live Schwab positions, for the report prompt."""
+    try:
+        from engine.schwab import connection_status, accounts_with_positions, flatten_positions
+        status = connection_status()
+        if not status.get("connected"):
+            return "Schwab 미연결 — 실시간 계좌 데이터 없음."
+        positions = flatten_positions(accounts_with_positions())
+        if not positions:
+            return "Schwab 연결됨, 보유 포지션 없음."
+        total = sum(p.get("Market Value") or 0 for p in positions) or 1
+        lines = [
+            f"- {p['Ticker']}: {p.get('Market Value', 0) / total * 100:.1f}% 비중, "
+            f"미실현손익 {p.get('Unrealized P/L %', 0):+.1f}%"
+            for p in sorted(positions, key=lambda p: p.get("Market Value") or 0, reverse=True)[:15]
+        ]
+        return "\n".join(lines)
+    except Exception:
+        return "계좌 데이터를 불러오지 못했습니다."
+
+
 def render() -> None:
     st.title("AI Center")
-    st.caption("실제 My Watchlist와 연동되며, 카드 클릭 시 상세 분석을 표시합니다.")
-    radar_tab, analyze_tab, compare_tab = st.tabs(["Today’s Radar", "Analyze", "Compare"])
+    st.caption("종목 발굴·비교·종합 리포트를 위한 코너입니다. 개별 종목 리스트/목표가 관리는 Watchlist에서 하세요.")
+    tickers = _watchlist()
+    with st.spinner("종목 스캔 중..."):
+        picks = _discover(tuple(tickers))
 
-    with radar_tab:
-        tickers = _watchlist()
-        signals = _radar(tuple(tickers))
-        selected = st.session_state.get("ai_selected_ticker")
-        st.markdown("### Today’s Priority")
-        top = signals.head(9)
-        for start in range(0, len(top), 3):
-            cols = st.columns(3)
-            for col, (_, row) in zip(cols, top.iloc[start:start+3].iterrows()):
-                with col:
-                    st.markdown(f'<div class="compact-stock-card"><div><b>{row["Ticker"]}</b><span>{row["Signal"]}</span></div><strong>{money(row["Price"])}</strong><small>{_signed(row.get("Daily %"))} · Score {row["Score"]}</small><p>{row["Reason"]}</p></div>', unsafe_allow_html=True)
-                    if st.button("Details", key=f'ai_detail_{row["Ticker"]}', use_container_width=True):
-                        st.session_state["ai_selected_ticker"] = row["Ticker"]
-                        selected = row["Ticker"]
-        if selected:
-            st.divider(); st.subheader(f"{selected} · Detail")
-            _detail(selected)
-        with st.expander("Full watchlist signal table"):
-            styled = signals.style.map(lambda v: "color:#45a3ff;font-weight:800" if isinstance(v,(int,float)) and v>0 else "color:#ff5b6e;font-weight:800" if isinstance(v,(int,float)) and v<0 else "", subset=["Daily %"])
-            st.dataframe(styled, use_container_width=True, hide_index=True, height=360)
-
-        st.divider()
-        st.markdown("### Discover — Watchlist 밖 주목할 종목")
-        st.caption("현재 Watchlist에 없는 종목 중, 같은 규칙 기반 신호가 BUY로 나오는 종목입니다.")
-        with st.spinner("종목 스캔 중..."):
-            picks = _discover(tuple(tickers))
-        if picks.empty:
-            st.info("지금은 Watchlist 밖에서 뚜렷한 BUY 신호가 나온 종목이 없습니다.")
-        else:
-            dcols = st.columns(3)
-            for i, (_, row) in enumerate(picks.iterrows()):
-                with dcols[i % 3]:
-                    st.markdown(f'<div class="compact-stock-card"><div><b>{row["Ticker"]}</b><span>{row["Signal"]}</span></div><strong>{money(row["Price"])}</strong><small>{_signed(row.get("Daily %"))} · Score {row["Score"]}</small><p>{row["Reason"]}</p></div>', unsafe_allow_html=True)
-                    b1, b2 = st.columns(2)
-                    if b1.button("Details", key=f'disc_detail_{row["Ticker"]}', use_container_width=True):
-                        st.session_state["ai_selected_ticker"] = row["Ticker"]
-                        st.rerun()
-                    if b2.button("+ Watch", key=f'disc_add_{row["Ticker"]}', use_container_width=True):
-                        _add_to_watchlist(row["Ticker"])
-                        st.rerun()
+    analyze_tab, compare_tab, discover_tab, report_tab = st.tabs(["Analyze", "Compare", "Discover", "종합 리포트"])
 
     with analyze_tab:
         if "ai_analyze_ticker" not in st.session_state:
             st.session_state["ai_analyze_ticker"] = "NVDA"
         quick_tickers = list(dict.fromkeys(list(tickers) + (list(picks["Ticker"]) if not picks.empty else [])))
         if quick_tickers:
-            st.caption("빠른 선택")
+            st.caption("빠른 선택 (Watchlist + Discover)")
             qcols = st.columns(min(8, len(quick_tickers)) or 1)
             for i, t in enumerate(quick_tickers[:16]):
                 if qcols[i % len(qcols)].button(t, key=f"quick_analyze_{t}", use_container_width=True):
@@ -313,3 +297,48 @@ def render() -> None:
         if left and right:
             data = _radar((left, right))
             st.dataframe(data, use_container_width=True, hide_index=True)
+
+    with discover_tab:
+        st.markdown("### Discover — Watchlist 밖 주목할 종목")
+        st.caption("현재 Watchlist에 없는 종목 중, 규칙 기반 신호가 BUY로 나오는 종목입니다.")
+        if picks.empty:
+            st.info("지금은 Watchlist 밖에서 뚜렷한 BUY 신호가 나온 종목이 없습니다.")
+        else:
+            dcols = st.columns(3)
+            for i, (_, row) in enumerate(picks.iterrows()):
+                with dcols[i % 3]:
+                    st.markdown(f'<div class="compact-stock-card"><div><b>{row["Ticker"]}</b><span>{row["Signal"]}</span></div><strong>{money(row["Price"])}</strong><small>{_signed(row.get("Daily %"))} · Score {row["Score"]}</small><p>{row["Reason"]}</p></div>', unsafe_allow_html=True)
+                    b1, b2 = st.columns(2)
+                    if b1.button("Details", key=f'disc_detail_{row["Ticker"]}', use_container_width=True):
+                        st.session_state["ai_analyze_ticker"] = row["Ticker"]
+                        st.toast(f'{row["Ticker"]}는 Analyze 탭에서 볼 수 있어요.')
+                    if b2.button("+ Watch", key=f'disc_add_{row["Ticker"]}', use_container_width=True):
+                        _add_to_watchlist(row["Ticker"])
+                        st.rerun()
+
+    with report_tab:
+        st.markdown("### 종합 분석 리포트")
+        st.caption("보유 종목(Schwab) + Watchlist + 신호를 종합해서, 지금 상황을 하나의 리포트로 정리합니다.")
+        from engine.claude_advisor import configured as _ai_configured, ask as _ai_ask
+        if not _ai_configured():
+            st.info("Anthropic API 키가 설정되지 않아 종합 리포트를 쓸 수 없습니다.")
+        else:
+            signals = _radar(tuple(tickers))
+            movers_text = "\n".join(
+                f"- {r['Ticker']}: {r['Signal']}, 점수 {r['Score']}, 일간 {r.get('Daily %', 0):+.2f}%"
+                for _, r in signals.head(15).iterrows()
+            )
+            portfolio_text = _portfolio_snapshot_text()
+            if st.button("🤖 종합 리포트 생성", key="ai_full_report_btn"):
+                system = (
+                    "너는 개인 투자 대시보드에 내장된 한국어 종합 분석 어시스턴트다. "
+                    "제공된 보유 종목 데이터와 Watchlist 신호만 근거로, 지금 포트폴리오 상태와 "
+                    "Watchlist에서 눈여겨볼 종목을 종합해서 하나의 리포트로 작성해라. "
+                    "섹션 구분(예: 포트폴리오 현황 / Watchlist 하이라이트 / 오늘 체크할 것)을 두고, "
+                    "확정적 매수/매도 지시가 아니라 참고용 정리 톤을 유지해라."
+                )
+                user = f"보유 종목 (Schwab):\n{portfolio_text}\n\nWatchlist 신호 요약:\n{movers_text}\n\n종합 리포트를 작성해줘."
+                with st.spinner("종합 리포트 생성 중..."):
+                    st.session_state["ai_full_report_text"] = _ai_ask(system, user, max_tokens=1200)
+            if st.session_state.get("ai_full_report_text"):
+                st.markdown(f'<div class="panel">{st.session_state["ai_full_report_text"]}</div>', unsafe_allow_html=True)
