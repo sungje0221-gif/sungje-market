@@ -748,27 +748,25 @@ def manual_portfolio():
             if st.form_submit_button("Save cash settings",type="primary"):
                 save_settings({"cash":cash,"buying_power":bp,"target_cash_pct":target}); st.rerun()
 
-    with st.expander("Add / Edit position", expanded=df.empty):
-        with st.form("manual_position"):
-            c = st.columns(7)
-            acc = c[0].text_input("Account", "Taxable")
-            ticker = c[1].text_input("Ticker").upper().strip()
-            shares = c[2].number_input("Shares", min_value=0.0, step=1.0)
-            avg = c[3].number_input("Avg Cost", min_value=0.0, step=.01)
-            category = c[4].selectbox("Strategy", STRATEGIES)
-            sector_choice = c[5].selectbox("Sector", SECTORS)
-            industry_manual = c[6].text_input("Industry", "")
-            if st.form_submit_button("Save position") and ticker and shares > 0:
-                prof=_security_profile(ticker) if sector_choice=="Auto detect" else {"Sector":sector_choice,"Industry":industry_manual or "Unknown"}
-                if industry_manual:
-                    prof["Industry"] = industry_manual
-                final_category = _suggest_strategy(ticker, prof) if category == "Other" and sector_choice == "Auto detect" else category
-                keep=df[~((df["Account"]==acc)&(df["Ticker"]==ticker))]
-                new=pd.DataFrame([[acc,ticker,shares,avg,final_category,prof["Sector"],prof["Industry"]]],columns=COLS)
-                save_portfolio(pd.concat([keep,new],ignore_index=True)); st.rerun()
-
     if df.empty:
         st.info("No manual positions yet. CSV Import에서 불러오거나 직접 추가하세요.")
+        with st.expander("종목 추가", expanded=True):
+            with st.form("manual_position_first"):
+                c = st.columns(7)
+                acc = c[0].text_input("Account", "Taxable")
+                ticker = c[1].text_input("Ticker").upper().strip()
+                shares = c[2].number_input("Shares", min_value=0.0, step=1.0)
+                avg = c[3].number_input("Avg Cost", min_value=0.0, step=.01)
+                category = c[4].selectbox("Strategy", STRATEGIES)
+                sector_choice = c[5].selectbox("Sector", SECTORS)
+                industry_manual = c[6].text_input("Industry", "")
+                if st.form_submit_button("Save position") and ticker and shares > 0:
+                    prof=_security_profile(ticker) if sector_choice=="Auto detect" else {"Sector":sector_choice,"Industry":industry_manual or "Unknown"}
+                    if industry_manual:
+                        prof["Industry"] = industry_manual
+                    final_category = _suggest_strategy(ticker, prof) if category == "Other" and sector_choice == "Auto detect" else category
+                    new=pd.DataFrame([[acc,ticker,shares,avg,final_category,prof["Sector"],prof["Industry"]]],columns=COLS)
+                    save_portfolio(new); st.rerun()
         return
 
     unknown=df[df["Sector"].isin(["Unknown",""]) ]
@@ -836,7 +834,8 @@ def manual_portfolio():
                 },
             )
 
-    with st.expander("종목 분류 편집 (Category/Sector) 및 삭제"):
+    with st.expander("Holdings 편집 (수량/평단가/분류) · 종목 추가 · 삭제", expanded=False):
+        st.caption("표 안의 셀을 클릭해서 수량, 평단가, 분류를 직접 수정할 수 있습니다.")
         display=e[[c for c in ["Account","Ticker","Signal","Shares","Avg Cost","Category","Sector","Industry","Current Price","Day %","Market Value","Cost Basis","P/L","P/L %","Weight %"] if c in e.columns]].copy()
         edited=st.data_editor(
             display,
@@ -857,8 +856,28 @@ def manual_portfolio():
             },
             key="portfolio_holdings_editor",
         )
-        if st.button("Save holdings edits"):
+        if st.button("변경사항 저장", type="primary"):
             base=edited[["Account","Ticker","Shares","Avg Cost","Category","Sector","Industry"]].copy(); save_portfolio(base); st.rerun()
+
+        st.divider()
+        st.markdown("##### 새 종목 추가")
+        with st.form("manual_position"):
+            c = st.columns(7)
+            acc = c[0].text_input("Account", "Taxable")
+            ticker = c[1].text_input("Ticker").upper().strip()
+            shares = c[2].number_input("Shares", min_value=0.0, step=1.0)
+            avg = c[3].number_input("Avg Cost", min_value=0.0, step=.01)
+            category = c[4].selectbox("Strategy", STRATEGIES)
+            sector_choice = c[5].selectbox("Sector", SECTORS)
+            industry_manual = c[6].text_input("Industry", "")
+            if st.form_submit_button("종목 추가") and ticker and shares > 0:
+                prof=_security_profile(ticker) if sector_choice=="Auto detect" else {"Sector":sector_choice,"Industry":industry_manual or "Unknown"}
+                if industry_manual:
+                    prof["Industry"] = industry_manual
+                final_category = _suggest_strategy(ticker, prof) if category == "Other" and sector_choice == "Auto detect" else category
+                keep=df[~((df["Account"]==acc)&(df["Ticker"]==ticker))]
+                new=pd.DataFrame([[acc,ticker,shares,avg,final_category,prof["Sector"],prof["Industry"]]],columns=COLS)
+                save_portfolio(pd.concat([keep,new],ignore_index=True)); st.rerun()
 
     with st.expander("Manage positions"):
         remove=st.multiselect("Delete positions", [f"{r.Account} · {r.Ticker}" for r in df.itertuples()])
