@@ -188,7 +188,7 @@ def _detail(ticker: str, records: list[dict]) -> None:
     f[5].metric("Target Mean", money(info.get("targetMeanPrice")))
 
     st.markdown("### Related News")
-    from pages.news import news as _fetch_news
+    from pages.news import news_ko as _fetch_news
     items, source, error = _fetch_news(ticker)
     st.caption(f"Source: {source} · cached for 15 minutes")
     if not items:

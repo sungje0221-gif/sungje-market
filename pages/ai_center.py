@@ -11,7 +11,7 @@ from engine.market_data import batch_history, batch_quotes, history, intraday_hi
 from utils.formatters import money, pct
 from utils.watchlist_store import load_watchlist_data, load_watchlist, save_watchlist
 from pages.heatmap import GROUPS as _DISCOVERY_GROUPS
-from pages.news import news as fetch_news
+from pages.news import news_ko as fetch_news
 
 FALLBACK = ["QQQM", "SMH", "GOOGL", "SKHY", "KORU", "JPM", "HOOD", "RKLB"]
 
@@ -249,20 +249,26 @@ def _add_to_watchlist(ticker: str) -> None:
 
 
 def _portfolio_snapshot_text() -> str:
-    """Best-effort summary of live Schwab positions, for the report prompt."""
+    """Best-effort summary of Manual Portfolio holdings, for the report prompt.
+
+    Manual Portfolio's cost basis is entered directly by the user, unlike
+    Schwab's live feed which can be wash-sale adjusted and therefore
+    misleading for P/L-based commentary.
+    """
     try:
-        from engine.schwab import connection_status, accounts_with_positions, flatten_positions
-        status = connection_status()
-        if not status.get("connected"):
-            return "Schwab 미연결 — 실시간 계좌 데이터 없음."
-        positions = flatten_positions(accounts_with_positions())
-        if not positions:
-            return "Schwab 연결됨, 보유 포지션 없음."
-        total = sum(p.get("Market Value") or 0 for p in positions) or 1
+        from utils.portfolio_store import load as load_manual_portfolio
+        from engine.portfolio import enrich
+        df = load_manual_portfolio()
+        if df is None or df.empty:
+            return "Manual Portfolio에 등록된 보유 종목이 없습니다."
+        e = enrich(df)
+        if e.empty or "Market Value" not in e:
+            return "Manual Portfolio에 등록된 보유 종목이 없습니다."
+        total = e["Market Value"].sum() or 1
         lines = [
-            f"- {p['Ticker']}: {p.get('Market Value', 0) / total * 100:.1f}% 비중, "
-            f"미실현손익 {p.get('Unrealized P/L %', 0):+.1f}%"
-            for p in sorted(positions, key=lambda p: p.get("Market Value") or 0, reverse=True)[:15]
+            f"- {r['Ticker']}: {r['Market Value'] / total * 100:.1f}% 비중, "
+            f"손익 {r.get('P/L %', 0):+.1f}%"
+            for _, r in e.sort_values("Market Value", ascending=False).head(15).iterrows()
         ]
         return "\n".join(lines)
     except Exception:
@@ -319,7 +325,7 @@ def render() -> None:
 
     with report_tab:
         st.markdown("### 종합 분석 리포트")
-        st.caption("보유 종목(Schwab) + Watchlist + 신호를 종합해서, 지금 상황을 하나의 리포트로 정리합니다.")
+        st.caption("보유 종목(Manual Portfolio) + Watchlist + 신호를 종합해서, 지금 상황을 하나의 리포트로 정리합니다.")
         from engine.claude_advisor import configured as _ai_configured, ask as _ai_ask
         if not _ai_configured():
             st.info("Anthropic API 키가 설정되지 않아 종합 리포트를 쓸 수 없습니다.")
@@ -338,7 +344,7 @@ def render() -> None:
                     "섹션 구분(예: 포트폴리오 현황 / Watchlist 하이라이트 / 오늘 체크할 것)을 두고, "
                     "확정적 매수/매도 지시가 아니라 참고용 정리 톤을 유지해라."
                 )
-                user = f"보유 종목 (Schwab):\n{portfolio_text}\n\nWatchlist 신호 요약:\n{movers_text}\n\n종합 리포트를 작성해줘."
+                user = f"보유 종목 (Manual Portfolio):\n{portfolio_text}\n\nWatchlist 신호 요약:\n{movers_text}\n\n종합 리포트를 작성해줘."
                 with st.spinner("종합 리포트 생성 중..."):
                     st.session_state["ai_full_report_text"] = _ai_ask(system, user, max_tokens=1800)
             if st.session_state.get("ai_full_report_text"):

@@ -179,15 +179,19 @@ def render() -> None:
         only_mine = st.toggle("내 종목만 보기 (Watchlist + Portfolio)", value=False)
         shown = upcoming[upcoming["My"]] if only_mine else upcoming
         st.markdown("### Upcoming")
-        for start in range(0, min(len(shown), 24), 4):
-            cols = st.columns(4)
-            for col, (_, row) in zip(cols, shown.iloc[start:start+4].iterrows()):
-                with col:
-                    dd = int(row["D-Day"])
-                    star = "★ " if row["My"] else ""
-                    st.markdown(f'<div class="compact-stock-card earnings-card"><div><b>{star}{row["Ticker"]}</b><span>D{dd:+d}</span></div><strong>{row["Date"]}</strong><p>{"Today" if dd==0 else "Upcoming earnings"}</p></div>', unsafe_allow_html=True)
-                    if st.button("Details", key=f'earn_{row["Ticker"]}', use_container_width=True):
-                        st.session_state["earn_selected"] = row["Ticker"]
+        for date_value, group in shown.groupby("Date", sort=False):
+            dd = int(group["D-Day"].iloc[0])
+            day_label = "오늘" if dd == 0 else ("내일" if dd == 1 else f"D{dd:+d}")
+            st.markdown(f"#### {date_value}  ·  {day_label}  ({len(group)}개 종목)")
+            group = group.reset_index(drop=True)
+            for start in range(0, len(group), 4):
+                cols = st.columns(4)
+                for col, (_, row) in zip(cols, group.iloc[start:start+4].iterrows()):
+                    with col:
+                        star = "★ " if row["My"] else ""
+                        st.markdown(f'<div class="compact-stock-card earnings-card"><div><b>{star}{row["Ticker"]}</b><span>D{dd:+d}</span></div><strong>{row["Date"]}</strong><p>{"Today" if dd==0 else "Upcoming earnings"}</p></div>', unsafe_allow_html=True)
+                        if st.button("Details", key=f'earn_{row["Ticker"]}', use_container_width=True):
+                            st.session_state["earn_selected"] = row["Ticker"]
     with st.expander("전체 실적 일정 (Watchlist·Portfolio는 ★)"):
         table = df.copy()
         table["Ticker"] = table.apply(lambda r: f'★ {r["Ticker"]}' if r["My"] else r["Ticker"], axis=1)
