@@ -11,6 +11,7 @@ from engine.fundamentals import earnings_history, next_earnings_date, ticker_inf
 from engine.market_data import history, intraday_history, quote
 from utils.formatters import money
 from utils.watchlist_store import load_watchlist_data
+from pages.heatmap import GROUPS as _EARNINGS_GROUPS
 
 DEFAULT = ["GOOGL", "META", "AMZN", "MSFT", "AAPL", "NVDA", "AVGO", "TSLA"]
 
@@ -29,6 +30,26 @@ CANDLES_BY_RANGE = {
 DEFAULT_CANDLE = {"1D": "1m", "5D": "5m", "1M": "60m", "3M": "1d", "6M": "1d", "1Y": "1d", "5Y": "1d"}
 
 
+def _portfolio_tickers() -> set[str]:
+    try:
+        from engine.schwab import connection_status, accounts_with_positions, flatten_positions
+        if connection_status().get("connected"):
+            positions = flatten_positions(accounts_with_positions())
+            tickers = {str(p.get("Ticker")).upper() for p in positions if p.get("Ticker")}
+            if tickers:
+                return tickers
+    except Exception:
+        pass
+    try:
+        from utils.portfolio_store import load as load_manual_portfolio
+        df = load_manual_portfolio()
+        if df is not None and not df.empty and "Ticker" in df:
+            return {str(t).upper() for t in df["Ticker"].dropna().unique()}
+    except Exception:
+        pass
+    return set()
+
+
 @st.cache_data(ttl=21600, show_spinner=False)
 def _earnings_rows(tickers: tuple[str, ...]) -> list[dict]:
     now = pd.Timestamp.now(tz="UTC")
@@ -38,7 +59,7 @@ def _earnings_rows(tickers: tuple[str, ...]) -> list[dict]:
         if ts is None:
             return {"Ticker": ticker, "Date": "—", "D-Day": None}
         return {"Ticker": ticker, "Date": ts.strftime("%Y-%m-%d"), "D-Day": int((ts.normalize() - now.normalize()).days)}
-    with ThreadPoolExecutor(max_workers=min(8, max(1, len(tickers)))) as pool:
+    with ThreadPoolExecutor(max_workers=min(20, max(1, len(tickers)))) as pool:
         futures = {pool.submit(one, t): t for t in tickers}
         for future in as_completed(futures):
             try: rows.append(future.result())
@@ -132,26 +153,45 @@ def _detail(ticker: str) -> None:
 
 def render() -> None:
     st.title("Earnings Radar")
-    records = load_watchlist_data(DEFAULT)
-    tickers = tuple(item.get("ticker") for item in records if item.get("ticker"))
-    with st.spinner("Loading cached earnings calendar..."):
-        rows = _earnings_rows(tickers)
-    df = pd.DataFrame(rows).sort_values("D-Day", na_position="last")
-    st.caption(f"My Watchlist {len(tickers)}개 종목 기준 · 날짜 목록은 6시간 캐시됩니다.")
+    watch_records = load_watchlist_data(DEFAULT)
+    watch_tickers = {str(item.get("ticker")).upper() for item in watch_records if item.get("ticker")}
+    portfolio_tickers = _portfolio_tickers()
+    my_tickers = watch_tickers | portfolio_tickers
 
-    upcoming = df[df["D-Day"].notna() & (df["D-Day"] >= 0)]
+    universe: list[str] = []
+    seen: set[str] = set()
+    for t in my_tickers:  # my own tickers always included even if outside the broad universe
+        if t not in seen:
+            seen.add(t); universe.append(t)
+    for group in _EARNINGS_GROUPS.values():
+        for t in group:
+            if t not in seen:
+                seen.add(t); universe.append(t)
+
+    with st.spinner(f"실적 캘린더 불러오는 중 ({len(universe)}개 종목)..."):
+        rows = _earnings_rows(tuple(universe))
+    df = pd.DataFrame(rows).sort_values("D-Day", na_position="last")
+    df["My"] = df["Ticker"].isin(my_tickers)
+    st.caption(f"전체 시장 {len(universe)}개 종목 기준 (Watchlist·Portfolio 종목은 ★ 표시) · 날짜 목록은 6시간 캐시됩니다.")
+
+    upcoming = df[df["D-Day"].notna() & (df["D-Day"] >= 0)].copy()
     if not upcoming.empty:
+        only_mine = st.toggle("내 종목만 보기 (Watchlist + Portfolio)", value=False)
+        shown = upcoming[upcoming["My"]] if only_mine else upcoming
         st.markdown("### Upcoming")
-        for start in range(0, min(len(upcoming), 12), 4):
+        for start in range(0, min(len(shown), 24), 4):
             cols = st.columns(4)
-            for col, (_, row) in zip(cols, upcoming.iloc[start:start+4].iterrows()):
+            for col, (_, row) in zip(cols, shown.iloc[start:start+4].iterrows()):
                 with col:
                     dd = int(row["D-Day"])
-                    st.markdown(f'<div class="compact-stock-card earnings-card"><div><b>{row["Ticker"]}</b><span>D{dd:+d}</span></div><strong>{row["Date"]}</strong><p>{"Today" if dd==0 else "Upcoming earnings"}</p></div>', unsafe_allow_html=True)
+                    star = "★ " if row["My"] else ""
+                    st.markdown(f'<div class="compact-stock-card earnings-card"><div><b>{star}{row["Ticker"]}</b><span>D{dd:+d}</span></div><strong>{row["Date"]}</strong><p>{"Today" if dd==0 else "Upcoming earnings"}</p></div>', unsafe_allow_html=True)
                     if st.button("Details", key=f'earn_{row["Ticker"]}', use_container_width=True):
                         st.session_state["earn_selected"] = row["Ticker"]
-    with st.expander("All watchlist earnings dates"):
-        st.dataframe(df, use_container_width=True, hide_index=True, height=380)
+    with st.expander("전체 실적 일정 (Watchlist·Portfolio는 ★)"):
+        table = df.copy()
+        table["Ticker"] = table.apply(lambda r: f'★ {r["Ticker"]}' if r["My"] else r["Ticker"], axis=1)
+        st.dataframe(table[["Ticker", "Date", "D-Day"]], use_container_width=True, hide_index=True, height=420)
 
     selected = st.session_state.get("earn_selected")
     if selected:
