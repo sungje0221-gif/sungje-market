@@ -129,6 +129,10 @@ def _detail(ticker: str) -> None:
     chart_data = intraday_history(ticker, period, interval) if is_intraday else history(ticker, period, interval)
 
     if not chart_data.empty:
+        from utils.formatters import period_return
+        pr = period_return(chart_data)
+        if pr is not None:
+            st.metric(f"{range_label} 수익률", f"{pr:+.2f}%")
         st.plotly_chart(
             advanced_chart(
                 chart_data, ticker,

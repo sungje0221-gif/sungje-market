@@ -164,6 +164,10 @@ def _detail(ticker: str) -> None:
     chart_data = intraday_history(ticker, period, interval) if is_intraday else history(ticker, period, interval)
 
     if not chart_data.empty:
+        from utils.formatters import period_return
+        pr = period_return(chart_data)
+        if pr is not None:
+            st.metric(f"{range_label} 수익률", f"{pr:+.2f}%")
         st.plotly_chart(
             advanced_chart(
                 chart_data, ticker,
@@ -279,8 +283,7 @@ def render() -> None:
     st.title("AI Center")
     st.caption("종목 발굴·비교·종합 리포트를 위한 코너입니다. 개별 종목 리스트/목표가 관리는 Watchlist에서 하세요.")
     tickers = _watchlist()
-    with st.spinner("종목 스캔 중..."):
-        picks = _discover(tuple(tickers))
+    picks = st.session_state.get("ai_discover_picks", pd.DataFrame())
 
     analyze_tab, compare_tab, discover_tab, report_tab = st.tabs(["Analyze", "Compare", "Discover", "종합 리포트"])
 
@@ -307,9 +310,13 @@ def render() -> None:
 
     with discover_tab:
         st.markdown("### Discover — Watchlist 밖 주목할 종목")
-        st.caption("현재 Watchlist에 없는 종목 중, 규칙 기반 신호가 BUY로 나오는 종목입니다.")
+        st.caption("현재 Watchlist에 없는 종목 중, 규칙 기반 신호가 BUY로 나오는 종목입니다. 90개 이상을 훑기 때문에 자동으로 돌리지 않고, 눌렀을 때만 스캔합니다.")
+        if st.button("🔍 종목 스캔하기 (약 90개, 몇 초 소요)", key="ai_discover_scan_btn"):
+            with st.spinner("종목 스캔 중..."):
+                picks = _discover(tuple(tickers))
+                st.session_state["ai_discover_picks"] = picks
         if picks.empty:
-            st.info("지금은 Watchlist 밖에서 뚜렷한 BUY 신호가 나온 종목이 없습니다.")
+            st.info("아직 스캔 전이거나, Watchlist 밖에서 뚜렷한 BUY 신호가 나온 종목이 없습니다.")
         else:
             dcols = st.columns(3)
             for i, (_, row) in enumerate(picks.iterrows()):

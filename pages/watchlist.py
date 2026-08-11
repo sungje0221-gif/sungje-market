@@ -137,6 +137,10 @@ def _detail(ticker: str, records: list[dict]) -> None:
     chart_df = intraday_history(ticker, period, interval) if is_intraday else history(ticker, period, interval)
 
     if not chart_df.empty:
+        from utils.formatters import period_return
+        pr = period_return(chart_df)
+        if pr is not None:
+            st.metric(f"{range_label} 수익률", f"{pr:+.2f}%")
         if is_intraday:
             latest = chart_df.index[-1]
             latest_text = latest.strftime("%b %d, %I:%M %p") if hasattr(latest, "strftime") else str(latest)
