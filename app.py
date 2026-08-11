@@ -42,6 +42,7 @@ ROUTES = {
     "Heatmap": ("pages.heatmap", "render"),
     "Watchlist": ("pages.watchlist", "render"),
     "Portfolio": ("pages.portfolio", "render"),
+    "Net Worth": ("pages.networth", "render"),
     "AI Center": ("pages.ai_center", "render"),
     "Earnings": ("pages.earnings", "render"),
     "Journal": ("pages.journal", "render"),
