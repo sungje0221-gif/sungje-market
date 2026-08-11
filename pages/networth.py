@@ -98,19 +98,33 @@ def render() -> None:
     c3.metric(f"투자 자산 ({invest_source})", money(invest_total))
     st.caption("투자 자산은 Schwab 연결 시 그 값을 우선 쓰고, 연결이 없으면 Manual Portfolio 합계를 씁니다 (중복 합산 방지).")
 
-    if net_worth:
-        invest_breakdown, _ = _investment_breakdown()
-        bank_breakdown = pd.DataFrame()
-        if not bank_df.empty:
-            bank_breakdown = pd.DataFrame({
-                "Name": bank_df["Institution"].astype(str) + " · " + bank_df["Account Name"].astype(str),
-                "Amount": pd.to_numeric(bank_df["Balance"], errors="coerce").fillna(0),
-            })
-        breakdown = pd.concat([bank_breakdown, invest_breakdown], ignore_index=True)
-        if not breakdown.empty:
-            breakdown = breakdown.sort_values("Amount", ascending=True)
-            st.markdown("#### 계좌별 상세")
-            st.bar_chart(breakdown.set_index("Name")["Amount"], horizontal=True)
+    if not bank_df.empty:
+        st.markdown("#### 은행 계좌 상세")
+        bank_names = []
+        for i, r in bank_df.reset_index(drop=True).iterrows():
+            inst_raw = str(r["Institution"]).strip()
+            inst = inst_raw if inst_raw and inst_raw.lower() != "none" else f"계좌 {i+1}"
+            acct = str(r["Account Name"]).strip()
+            label = f"{inst} · {acct}" if acct and acct.lower() != "none" else inst
+            bank_names.append(label)
+        bank_chart_df = pd.DataFrame({
+            "Name": bank_names,
+            "Amount": pd.to_numeric(bank_df["Balance"], errors="coerce").fillna(0).values,
+        })
+        # Guard against duplicate labels (e.g. two accounts with the same
+        # institution and no account name) silently summing into one bar.
+        seen: dict[str, int] = {}
+        unique_names = []
+        for name in bank_chart_df["Name"]:
+            seen[name] = seen.get(name, 0) + 1
+            unique_names.append(name if seen[name] == 1 else f"{name} ({seen[name]})")
+        bank_chart_df["Name"] = unique_names
+        st.bar_chart(bank_chart_df.sort_values("Amount").set_index("Name")["Amount"], horizontal=True)
+
+    invest_breakdown, _ = _investment_breakdown()
+    if not invest_breakdown.empty:
+        st.markdown("#### 투자 계좌 상세")
+        st.bar_chart(invest_breakdown.sort_values("Amount").set_index("Name")["Amount"], horizontal=True)
 
     st.divider()
     st.markdown("### 은행 계좌")
