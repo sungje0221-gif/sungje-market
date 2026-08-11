@@ -358,7 +358,7 @@ POSITION_CANDLES_BY_RANGE = {
 POSITION_DEFAULT_CANDLE = {"1D": "1m", "5D": "5m", "1M": "60m", "3M": "1d", "6M": "1d", "1Y": "1d", "5Y": "1d"}
 
 
-def _position_detail(ticker: str, row: pd.Series) -> None:
+def _position_detail(ticker: str, row: pd.Series, state_key: str = "portfolio_selected_ticker") -> None:
     """Same chart pattern as Heatmap/Earnings/AI Center, plus this account's actual position numbers."""
     q = quote(ticker)
     info = ticker_info(ticker)
@@ -368,8 +368,8 @@ def _position_detail(ticker: str, row: pd.Series) -> None:
     with header_left:
         st.markdown(f"#### {ticker} · {company}")
     with header_right:
-        if st.button("닫기", key=f"close_pos_detail_{ticker}", use_container_width=True):
-            st.session_state.pop("portfolio_selected_ticker", None)
+        if st.button("닫기", key=f"close_pos_detail_{state_key}_{ticker}", use_container_width=True):
+            st.session_state.pop(state_key, None)
             st.rerun()
 
     cols = st.columns(6)
@@ -377,17 +377,19 @@ def _position_detail(ticker: str, row: pd.Series) -> None:
     cols[1].metric("보유수량", f'{row["Shares"]:g}')
     cols[2].metric("평단가", money(row["Avg Cost"]))
     cols[3].metric("평가금액", money(row["Market Value"]))
-    cols[4].metric("평가손익", money(row["Unrealized P/L"]), f'{row["Unrealized P/L %"]:+.2f}%')
+    pl_value = row.get("Unrealized P/L", row.get("P/L"))
+    pl_pct = row.get("Unrealized P/L %", row.get("P/L %"))
+    cols[4].metric("평가손익", money(pl_value), None if pl_pct is None else f'{pl_pct:+.2f}%')
     cols[5].metric("계좌 내 비중", f'{row["Weight %"]:.1f}%')
 
     range_col, candle_col = st.columns([2, 1])
     with range_col:
-        range_label = st.radio("기간", list(POSITION_CHART_RANGES), horizontal=True, index=5, key=f"pos_range_{ticker}")
+        range_label = st.radio("기간", list(POSITION_CHART_RANGES), horizontal=True, index=5, key=f"pos_range_{state_key}_{ticker}")
     candle_options = POSITION_CANDLES_BY_RANGE[range_label]
     with candle_col:
         interval = st.selectbox(
             "봉", candle_options, index=candle_options.index(POSITION_DEFAULT_CANDLE[range_label]),
-            key=f"pos_candle_{ticker}_{range_label}",
+            key=f"pos_candle_{state_key}_{ticker}_{range_label}",
         )
     period = POSITION_CHART_RANGES[range_label]
     is_intraday = interval.endswith("m") or interval.endswith("h")
@@ -555,13 +557,13 @@ def schwab_portfolio():
             rows_selected = (event or {}).get("selection", {}).get("rows", []) if hasattr(event, "get") else []
             if rows_selected:
                 clicked_ticker = str(sub_display.iloc[rows_selected[0]]["Ticker"])
-                st.session_state["portfolio_selected_ticker"] = clicked_ticker
-                st.session_state["portfolio_selected_row"] = sub_display.iloc[rows_selected[0]].to_dict()
+                st.session_state["portfolio_selected_ticker_schwab"] = clicked_ticker
+                st.session_state["portfolio_selected_row_schwab"] = sub_display.iloc[rows_selected[0]].to_dict()
 
-    selected_ticker = st.session_state.get("portfolio_selected_ticker")
-    if selected_ticker and st.session_state.get("portfolio_selected_row"):
+    selected_ticker = st.session_state.get("portfolio_selected_ticker_schwab")
+    if selected_ticker and st.session_state.get("portfolio_selected_row_schwab"):
         st.divider()
-        _position_detail(selected_ticker, pd.Series(st.session_state["portfolio_selected_row"]))
+        _position_detail(selected_ticker, pd.Series(st.session_state["portfolio_selected_row_schwab"]), state_key="portfolio_selected_ticker_schwab")
 
 
 @st.cache_data(ttl=86400, show_spinner=False)
@@ -815,11 +817,13 @@ def manual_portfolio():
         with st.expander(header, expanded=True):
             sub_display = sub[holding_cols].sort_values("Weight %", ascending=False) if "Weight %" in sub else sub[holding_cols]
             sub_style = style_signed_columns(sub_display, [c for c in ["Day %", "P/L", "P/L %"] if c in sub_display.columns])
-            st.dataframe(
+            event = st.dataframe(
                 sub_style,
                 use_container_width=True,
                 hide_index=True,
                 key=f"manual_holdings_table_{account_name}",
+                on_select="rerun",
+                selection_mode="single-row",
                 column_config={
                     "Shares": st.column_config.NumberColumn(format="%.4f"),
                     "Current Price": st.column_config.NumberColumn(format="$%.2f"),
@@ -833,6 +837,16 @@ def manual_portfolio():
                     "Category": st.column_config.Column("Strategy"),
                 },
             )
+            rows_selected = (event or {}).get("selection", {}).get("rows", []) if hasattr(event, "get") else []
+            if rows_selected:
+                clicked_ticker = str(sub_display.iloc[rows_selected[0]]["Ticker"])
+                st.session_state["portfolio_selected_ticker_manual"] = clicked_ticker
+                st.session_state["portfolio_selected_row_manual"] = sub_display.iloc[rows_selected[0]].to_dict()
+
+    selected_ticker = st.session_state.get("portfolio_selected_ticker_manual")
+    if selected_ticker and st.session_state.get("portfolio_selected_row_manual"):
+        st.divider()
+        _position_detail(selected_ticker, pd.Series(st.session_state["portfolio_selected_row_manual"]), state_key="portfolio_selected_ticker_manual")
 
     with st.expander("Holdings 편집 (수량/평단가/분류) · 종목 추가 · 삭제", expanded=False):
         st.caption("표 안의 셀을 클릭해서 수량, 평단가, 분류를 직접 수정할 수 있습니다.")
