@@ -48,6 +48,39 @@ def _investment_total() -> tuple[float, str]:
     return 0.0, "데이터 없음"
 
 
+def _investment_breakdown() -> tuple[pd.DataFrame, str]:
+    """Per-account investment breakdown (same source priority as _investment_total)."""
+    try:
+        from engine.schwab import connection_status, accounts_with_positions, account_summary
+        if connection_status().get("connected"):
+            summaries = pd.DataFrame(account_summary(accounts_with_positions()))
+            if not summaries.empty and "Liquidation Value" in summaries:
+                account_col = "Account" if "Account" in summaries else summaries.columns[0]
+                out = pd.DataFrame({
+                    "Name": "Schwab · " + summaries[account_col].astype(str),
+                    "Amount": pd.to_numeric(summaries["Liquidation Value"], errors="coerce").fillna(0),
+                })
+                return out, "Schwab (실시간)"
+    except Exception:
+        pass
+    try:
+        from utils.portfolio_store import load as load_manual_portfolio
+        from engine.portfolio import enrich
+        df = load_manual_portfolio()
+        if df is not None and not df.empty:
+            e = enrich(df)
+            if not e.empty and "Market Value" in e and "Account" in e:
+                grouped = e.groupby("Account", as_index=False)["Market Value"].sum()
+                out = pd.DataFrame({
+                    "Name": "Portfolio · " + grouped["Account"].astype(str),
+                    "Amount": grouped["Market Value"],
+                })
+                return out, "Manual Portfolio"
+    except Exception:
+        pass
+    return pd.DataFrame(columns=["Name", "Amount"]), "데이터 없음"
+
+
 def render() -> None:
     st.title("Net Worth")
     st.caption("은행 계좌 잔액 + 투자 자산을 합쳐서 전체 순자산을 봅니다.")
@@ -66,8 +99,18 @@ def render() -> None:
     st.caption("투자 자산은 Schwab 연결 시 그 값을 우선 쓰고, 연결이 없으면 Manual Portfolio 합계를 씁니다 (중복 합산 방지).")
 
     if net_worth:
-        breakdown = pd.DataFrame({"구분": ["은행 계좌", "투자 자산"], "금액": [bank_total, invest_total]})
-        st.bar_chart(breakdown.set_index("구분"))
+        invest_breakdown, _ = _investment_breakdown()
+        bank_breakdown = pd.DataFrame()
+        if not bank_df.empty:
+            bank_breakdown = pd.DataFrame({
+                "Name": bank_df["Institution"].astype(str) + " · " + bank_df["Account Name"].astype(str),
+                "Amount": pd.to_numeric(bank_df["Balance"], errors="coerce").fillna(0),
+            })
+        breakdown = pd.concat([bank_breakdown, invest_breakdown], ignore_index=True)
+        if not breakdown.empty:
+            breakdown = breakdown.sort_values("Amount", ascending=True)
+            st.markdown("#### 계좌별 상세")
+            st.bar_chart(breakdown.set_index("Name")["Amount"], horizontal=True)
 
     st.divider()
     st.markdown("### 은행 계좌")
