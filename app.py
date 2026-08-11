@@ -3,6 +3,10 @@ import traceback
 
 import streamlit as st
 
+import components.sidebar
+import components.theme
+importlib.reload(components.sidebar)
+importlib.reload(components.theme)
 from components.sidebar import render_sidebar
 from components.theme import inject_dashboard_v092, inject_heatmap_v093, inject_theme, inject_v098, inject_v301, inject_v309
 
