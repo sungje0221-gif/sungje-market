@@ -59,7 +59,7 @@ def _earnings_rows(tickers: tuple[str, ...]) -> list[dict]:
         if ts is None:
             return {"Ticker": ticker, "Date": "—", "D-Day": None}
         return {"Ticker": ticker, "Date": ts.strftime("%Y-%m-%d"), "D-Day": int((ts.normalize() - now.normalize()).days)}
-    with ThreadPoolExecutor(max_workers=min(20, max(1, len(tickers)))) as pool:
+    with ThreadPoolExecutor(max_workers=min(4, max(1, len(tickers)))) as pool:
         futures = {pool.submit(one, t): t for t in tickers}
         for future in as_completed(futures):
             try: rows.append(future.result())
