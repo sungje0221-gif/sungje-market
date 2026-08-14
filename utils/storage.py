@@ -75,6 +75,17 @@ def load_cloud_json(key: str, default):
     return load_json(f"{key}.json", default)
 
 
+def _sanitize_for_json(value):
+    """Recursively replace NaN/Infinity (which aren't valid JSON) with None."""
+    if isinstance(value, float) and (value != value or value in (float("inf"), float("-inf"))):
+        return None
+    if isinstance(value, dict):
+        return {k: _sanitize_for_json(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_sanitize_for_json(v) for v in value]
+    return value
+
+
 def save_cloud_json(key: str, payload) -> tuple[bool, str | None]:
     """Always write the local fallback file, and mirror to Supabase if configured.
 
@@ -84,6 +95,7 @@ def save_cloud_json(key: str, payload) -> tuple[bool, str | None]:
     worked) but never actually reach Supabase -- and then vanish the next
     time the container restarted, with no warning ever shown.
     """
+    payload = _sanitize_for_json(payload)
     save_json(f"{key}.json", payload)
     config = _blob_config()
     if not config:
