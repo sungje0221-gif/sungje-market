@@ -19,8 +19,8 @@ def _load_bank_accounts() -> pd.DataFrame:
     return pd.DataFrame(rows, columns=BANK_COLS)
 
 
-def _save_bank_accounts(df: pd.DataFrame) -> None:
-    save_cloud_json("bank_accounts", df.to_dict("records"))
+def _save_bank_accounts(df: pd.DataFrame) -> tuple[bool, str | None]:
+    return save_cloud_json("bank_accounts", df.to_dict("records"))
 
 
 def _investment_total() -> tuple[float, str]:
@@ -159,5 +159,8 @@ def render() -> None:
             if "Updated" in clean:
                 clean["Updated"] = clean["Updated"].apply(lambda v: v if v else str(date.today()))
             clean["Balance"] = pd.to_numeric(clean["Balance"], errors="coerce").fillna(0)
-            _save_bank_accounts(clean[BANK_COLS])
-            st.rerun()
+            cloud_saved, error = _save_bank_accounts(clean[BANK_COLS])
+            if not cloud_saved:
+                st.error(f"⚠️ Supabase 저장에 실패했습니다 — 지금은 로컬에만 저장되어 서버가 재시작되면 사라질 수 있습니다.\n\n{error}")
+            else:
+                st.rerun()

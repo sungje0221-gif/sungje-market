@@ -75,12 +75,19 @@ def load_cloud_json(key: str, default):
     return load_json(f"{key}.json", default)
 
 
-def save_cloud_json(key: str, payload) -> None:
-    """Always write the local fallback file, and mirror to Supabase if configured."""
+def save_cloud_json(key: str, payload) -> tuple[bool, str | None]:
+    """Always write the local fallback file, and mirror to Supabase if configured.
+
+    Returns (cloud_saved, error_message). A previous version of this
+    function swallowed every Supabase write failure silently, so a save
+    could "succeed" for the rest of that session (the local file still
+    worked) but never actually reach Supabase -- and then vanish the next
+    time the container restarted, with no warning ever shown.
+    """
     save_json(f"{key}.json", payload)
     config = _blob_config()
     if not config:
-        return
+        return False, "Supabase가 설정되지 않았습니다 (로컬 임시저장만 됨)."
     try:
         endpoint = f"{config['url']}/rest/v1/{config['table']}"
         response = requests.post(
@@ -91,5 +98,11 @@ def save_cloud_json(key: str, payload) -> None:
             timeout=10,
         )
         response.raise_for_status()
-    except Exception:
-        pass  # local file above still keeps this usable for the session
+        return True, None
+    except Exception as exc:
+        detail = str(exc)
+        try:
+            detail = response.text[:300]
+        except Exception:
+            pass
+        return False, detail

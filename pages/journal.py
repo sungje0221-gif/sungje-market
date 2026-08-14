@@ -14,7 +14,11 @@ def render():
         reason=st.text_area("Reason");result=st.selectbox("Result",["OPEN","WIN","LOSS","BREAKEVEN"]);lesson=st.text_area("Lesson")
         if st.form_submit_button("Save") and t:
             updated=pd.concat([df,pd.DataFrame([[str(d),t,a,p,s,reason,result,lesson]],columns=COLS)],ignore_index=True)
-            save_cloud_json("journal",updated.to_dict("records"));st.rerun()
+            cloud_saved,error=save_cloud_json("journal",updated.to_dict("records"))
+            if not cloud_saved:
+                st.error(f"⚠️ Supabase 저장에 실패했습니다 — 지금은 로컬에만 저장되어 서버가 재시작되면 사라질 수 있습니다.\n\n{error}")
+            else:
+                st.rerun()
     if df.empty:st.info("No journal entries.");return
     wins=(df["Result"]=="WIN").sum();losses=(df["Result"]=="LOSS").sum();closed=wins+losses
     c=st.columns(4);c[0].metric("Entries",len(df));c[1].metric("Closed",closed);c[2].metric("Win Rate",f"{wins/closed*100:.1f}%" if closed else "0.0%")
