@@ -9,6 +9,7 @@ from engine.analysis import analyze
 from engine.fundamentals import days_to_earnings, fundamental_score, ticker_info
 from engine.market_data import batch_history, batch_quotes, history, intraday_history, quote
 from utils.formatters import compact, money
+from utils.export import excel_download_button
 from utils.watchlist_store import delete_watchlist_item, load_watchlist_data, save_watchlist_data, storage_status
 from pages.command_center import _score_from_frame, _priority_tag
 
@@ -303,6 +304,7 @@ def _mover_table(rows: list[dict], quotes: dict[str, dict]) -> None:
             "Memo": st.column_config.TextColumn("Memo", width="medium"),
         },
     )
+    excel_download_button(frame, "watchlist", key="xl_watchlist")
 
 
 def render() -> None:

@@ -21,6 +21,7 @@ from engine.schwab import (
 )
 from utils.portfolio_store import (load as load_portfolio, save as save_portfolio, status as portfolio_status, cloud_enabled, load_settings, save_settings)
 from utils.formatters import money
+from utils.export import excel_download_button
 from components.colored_tables import style_signed_columns
 
 COLS = ["Account", "Ticker", "Shares", "Avg Cost", "Category", "Sector", "Industry"]
@@ -563,6 +564,7 @@ def schwab_portfolio():
                 clicked_ticker = str(sub_display.iloc[rows_selected[0]]["Ticker"])
                 st.session_state["portfolio_selected_ticker_schwab"] = clicked_ticker
                 st.session_state["portfolio_selected_row_schwab"] = sub_display.iloc[rows_selected[0]].to_dict()
+            excel_download_button(sub_display, f"schwab_{account_number}_positions", key=f"xl_schwab_{account_number}")
 
     selected_ticker = st.session_state.get("portfolio_selected_ticker_schwab")
     if selected_ticker and st.session_state.get("portfolio_selected_row_schwab"):
@@ -846,6 +848,7 @@ def manual_portfolio():
                 clicked_ticker = str(sub_display.iloc[rows_selected[0]]["Ticker"])
                 st.session_state["portfolio_selected_ticker_manual"] = clicked_ticker
                 st.session_state["portfolio_selected_row_manual"] = sub_display.iloc[rows_selected[0]].to_dict()
+            excel_download_button(sub_display, f"manual_{account_name}_holdings", key=f"xl_manual_{account_name}")
 
     selected_ticker = st.session_state.get("portfolio_selected_ticker_manual")
     if selected_ticker and st.session_state.get("portfolio_selected_row_manual"):

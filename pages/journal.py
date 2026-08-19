@@ -1,6 +1,7 @@
 from datetime import date
 import pandas as pd,streamlit as st
 from utils.storage import load_cloud_json,save_cloud_json,cloud_configured
+from utils.export import excel_download_button
 COLS=["Date","Ticker","Action","Price","Shares","Reason","Result","Lesson"]
 def render():
     st.title("Trading Journal")
@@ -24,3 +25,4 @@ def render():
     c=st.columns(4);c[0].metric("Entries",len(df));c[1].metric("Closed",closed);c[2].metric("Win Rate",f"{wins/closed*100:.1f}%" if closed else "0.0%")
     top=df["Ticker"].value_counts().index[0];c[3].metric("Most Traded",top)
     st.dataframe(df.sort_values("Date",ascending=False),use_container_width=True,hide_index=True)
+    excel_download_button(df,"journal",key="xl_journal")

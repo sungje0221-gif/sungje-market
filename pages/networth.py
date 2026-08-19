@@ -7,6 +7,7 @@ import pandas as pd
 import streamlit as st
 
 from utils.formatters import money
+from utils.export import excel_download_button
 from utils.storage import load_cloud_json, save_cloud_json, cloud_configured
 
 BANK_COLS = ["Institution", "Account Name", "Type", "Balance", "Updated"]
@@ -214,6 +215,7 @@ def render() -> None:
 
         st.markdown("#### 순자산 추이")
         st.line_chart(snapshots.set_index("Date")["NetWorth"])
+        excel_download_button(snapshots, "networth_history", key="xl_networth_history")
 
     if not bank_df.empty:
         st.markdown("#### 은행 계좌 상세")
@@ -255,6 +257,7 @@ def render() -> None:
             hide_index=True,
             column_config={"Balance": st.column_config.NumberColumn(format="$%.2f")},
         )
+        excel_download_button(display, "bank_accounts", key="xl_bank_accounts")
 
     with st.expander("계좌 추가 / 편집 / 삭제", expanded=bank_df.empty):
         st.caption("표 안의 셀을 클릭해서 바로 수정할 수 있습니다. 새 행을 추가하려면 표 맨 아래 + 버튼을 누르세요.")
