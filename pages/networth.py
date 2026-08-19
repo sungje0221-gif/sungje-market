@@ -176,12 +176,12 @@ def render() -> None:
     if len(snapshots) < 2:
         st.info("비교할 과거 기록이 아직 없습니다. 내일부터 '오늘의 변동'이 보이기 시작해요.")
     else:
-        def _change_since(days_ago: int) -> tuple[float | None, float | None]:
-            """(raw change, flow-adjusted change) vs the closest snapshot at
-            least `days_ago` calendar days back. None if no snapshot exists
-            far enough back yet."""
-            cutoff = (datetime.now(ET) - pd.Timedelta(days=days_ago)).strftime("%Y-%m-%d")
-            past = snapshots[snapshots["Date"] <= cutoff]
+        def _change_since(cutoff_date_str: str) -> tuple[float | None, float | None]:
+            """(raw change, flow-adjusted change) vs the closest snapshot on
+            or before cutoff_date_str. None if no snapshot exists that far
+            back yet -- which, for most of these periods, will be the case
+            for a while since tracking only started today."""
+            past = snapshots[snapshots["Date"] <= cutoff_date_str]
             if past.empty:
                 return None, None
             past_value = float(past.iloc[-1]["NetWorth"])
@@ -189,22 +189,28 @@ def render() -> None:
             flows_since = cashflows[cashflows["Date"] > past.iloc[-1]["Date"]]["Amount"].sum() if not cashflows.empty else 0.0
             return raw_change, raw_change - flows_since
 
-        day_raw, day_adj = _change_since(1)
-        week_raw, week_adj = _change_since(7)
+        now_et = datetime.now(ET)
+        period_cutoffs = {
+            "1D": now_et - pd.Timedelta(days=1),
+            "1W": now_et - pd.Timedelta(days=7),
+            "1M": now_et - pd.Timedelta(days=30),
+            "3M": now_et - pd.Timedelta(days=91),
+            "6M": now_et - pd.Timedelta(days=182),
+            "YTD": now_et.replace(month=1, day=1),
+            "1Y": now_et - pd.Timedelta(days=365),
+            "3Y": now_et - pd.Timedelta(days=365 * 3),
+            "5Y": now_et - pd.Timedelta(days=365 * 5),
+        }
+        period = st.radio("기간", list(period_cutoffs), horizontal=True, index=0, key="networth_period")
+        raw_change, adj_change = _change_since(period_cutoffs[period].strftime("%Y-%m-%d"))
 
         rc1, rc2 = st.columns(2)
-        with rc1:
-            if day_adj is None:
-                st.metric("오늘의 변동", "—")
-            else:
-                st.metric("오늘의 변동 (입출금 제외 순수 투자 손익)", money(day_adj))
-                st.caption(f"참고: 입출금 포함 실제 잔고 변동은 {money(day_raw)}")
-        with rc2:
-            if week_adj is None:
-                st.metric("이번주 변동", "—")
-            else:
-                st.metric("최근 7일 변동 (입출금 제외)", money(week_adj))
-                st.caption(f"참고: 입출금 포함 실제 잔고 변동은 {money(week_raw)}")
+        if adj_change is None:
+            rc1.metric(f"{period} 변동", "—")
+            rc2.caption("아직 이 기간만큼 쌓인 기록이 없습니다. 시간이 지나면 자동으로 채워집니다.")
+        else:
+            rc1.metric(f"{period} 변동 (입출금 제외 순수 투자 손익)", money(adj_change))
+            rc2.metric("참고: 입출금 포함 실제 잔고 변동", money(raw_change))
 
         st.markdown("#### 순자산 추이")
         st.line_chart(snapshots.set_index("Date")["NetWorth"])
