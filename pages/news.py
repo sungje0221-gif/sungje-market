@@ -65,45 +65,6 @@ def news(ticker):
     return [], "Unavailable", "; ".join(errors[-2:])
 
 
-@st.cache_data(ttl=900, show_spinner=False)
-def news_ko(ticker):
-    """Same as news(), but title/summary translated to Korean when possible."""
-    items, source, error = news(ticker)
-    if not items:
-        return items, source, error
-    try:
-        from engine.claude_advisor import configured, ask
-        if not configured():
-            return items, source, error
-        import json
-        subset = items[:15]
-        payload = [{"i": i, "title": it["title"], "summary": (it.get("summary") or "")[:400]} for i, it in enumerate(subset)]
-        system = (
-            "너는 금융 뉴스 번역기다. 입력된 JSON 배열의 각 항목에서 title과 summary를 "
-            "자연스러운 한국어로 번역해라. 고유명사(회사명, 티커)는 그대로 두거나 병기해도 된다. "
-            "다른 설명 없이, 입력과 정확히 같은 구조의 JSON 배열만 출력해라."
-        )
-        user = json.dumps(payload, ensure_ascii=False)
-        raw = ask(system, user, max_tokens=2500)
-        cleaned = raw.strip()
-        if cleaned.startswith("```"):
-            cleaned = cleaned.split("```", 2)[1]
-            if cleaned.startswith("json"):
-                cleaned = cleaned[4:]
-        translated = json.loads(cleaned)
-        by_index = {t.get("i"): t for t in translated if isinstance(t, dict)}
-        for i, it in enumerate(subset):
-            t = by_index.get(i)
-            if t:
-                it["title"] = t.get("title") or it["title"]
-                if it.get("summary"):
-                    it["summary"] = t.get("summary") or it["summary"]
-        return items, source, error
-    except Exception:
-        # Any translation failure just falls back to the original English feed.
-        return items, source, error
-
-
 def render():
     st.title("News & AI Briefing")
     records = load_watchlist_data(DEFAULT)

@@ -42,100 +42,14 @@ def configured() -> bool:
     return all(config().values())
 
 
-def _supabase_config() -> dict[str, str] | None:
-    try:
-        section = st.secrets.get("supabase", {})
-        url = str(section.get("url", "")).rstrip("/")
-        key = str(section.get("key", ""))
-        table = str(section.get("schwab_token_table", "schwab_tokens"))
-        profile = str(section.get("profile_id", "sungje"))
-        if url and key:
-            return {"url": url, "key": key, "table": table, "profile": profile}
-    except Exception:
-        pass
-    return None
-
-
-def _supabase_headers(config: dict[str, str], prefer: str | None = None) -> dict[str, str]:
-    headers = {
-        "apikey": config["key"],
-        "Authorization": f"Bearer {config['key']}",
-        "Content-Type": "application/json",
-    }
-    if prefer:
-        headers["Prefer"] = prefer
-    return headers
-
-
-def _cloud_save_token(payload: dict[str, Any]) -> None:
-    config = _supabase_config()
-    if not config:
-        return
-    endpoint = f"{config['url']}/rest/v1/{config['table']}"
-    body = {"profile_id": config["profile"], "token": payload}
-    try:
-        response = requests.post(
-            endpoint,
-            headers=_supabase_headers(config, "resolution=merge-duplicates,return=minimal"),
-            params={"on_conflict": "profile_id"},
-            json=[body],
-            timeout=10,
-        )
-        response.raise_for_status()
-    except Exception:
-        pass  # local file below still keeps the token usable for this session
-
-
-def _cloud_load_token() -> dict[str, Any] | None:
-    config = _supabase_config()
-    if not config:
-        return None
-    endpoint = f"{config['url']}/rest/v1/{config['table']}"
-    try:
-        response = requests.get(
-            endpoint,
-            headers=_supabase_headers(config),
-            params={"profile_id": f"eq.{config['profile']}", "select": "token"},
-            timeout=10,
-        )
-        response.raise_for_status()
-        rows = response.json()
-        return rows[0]["token"] if rows else None
-    except Exception:
-        return None
-
-
-def _cloud_delete_token() -> None:
-    config = _supabase_config()
-    if not config:
-        return
-    endpoint = f"{config['url']}/rest/v1/{config['table']}"
-    try:
-        requests.delete(
-            endpoint,
-            headers=_supabase_headers(config, "return=minimal"),
-            params={"profile_id": f"eq.{config['profile']}"},
-            timeout=10,
-        )
-    except Exception:
-        pass
-
-
 def save_token(token: dict[str, Any]) -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     payload = dict(token)
     payload["saved_at"] = int(time.time())
     TOKEN_PATH.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-    # Local file alone doesn't survive a Streamlit Cloud container restart
-    # (the whole filesystem resets to the git checkout), so this is also
-    # mirrored to Supabase, the same way watchlist/portfolio data already is.
-    _cloud_save_token(payload)
 
 
 def load_token() -> dict[str, Any] | None:
-    cloud = _cloud_load_token()
-    if cloud:
-        return cloud
     if not TOKEN_PATH.exists():
         return None
     try:
@@ -147,7 +61,6 @@ def load_token() -> dict[str, Any] | None:
 def delete_token() -> None:
     if TOKEN_PATH.exists():
         TOKEN_PATH.unlink()
-    _cloud_delete_token()
 
 
 def authorization_url(state: str | None = None) -> str:

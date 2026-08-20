@@ -5,7 +5,7 @@ import streamlit as st
 
 from components.cards import stars
 from components.charts import advanced_chart
-from engine.analysis import analyze
+from engine.analysis import analyze, blended_rating
 from engine.fundamentals import days_to_earnings, fundamental_score, ticker_info
 from engine.market_data import batch_history, batch_quotes, history, intraday_history, quote
 from utils.formatters import compact, money
@@ -60,14 +60,25 @@ def _detail(ticker: str, records: list[dict]) -> None:
     one_year = history(ticker, "1y", "1d")
     a = analyze(one_year)
     info = ticker_info(ticker)
+    fscore_top = fundamental_score(info)
+    blended = blended_rating(a.get("score"), fscore_top.get("score"))
     st.markdown(f"## {ticker} · Details")
     stats = st.columns(6)
     stats[0].metric("Price", money(q.get("price")), None if q.get("change_pct") is None else f'{q["change_pct"]:+.2f}%')
-    stats[1].metric("AI", a.get("action", "—"))
-    stats[2].metric("Score", "—" if a.get("score") is None else f'{a["score"]:.0f}/100')
-    stats[3].metric("Rating", "—" if a.get("score") is None else stars(a["score"]))
+    stats[1].metric("AI", blended.get("action", "—"))
+    stats[2].metric("Score", "—" if blended.get("score") is None else f'{blended["score"]:.0f}/100')
+    stats[3].metric("Rating", "—" if blended.get("score") is None else stars(blended["score"]))
     stats[4].metric("Target", money(row.get("target_price")))
     stats[5].metric("Earnings", "—" if days_to_earnings(ticker) is None else f'D{days_to_earnings(ticker):+d}')
+    with st.expander("점수 구성 보기 (기술적 vs 펀더멘털)", expanded=False):
+        bd = st.columns(3)
+        bd[0].metric("기술 점수 (추세/RSI/MACD)", "—" if a.get("score") is None else f'{a["score"]:.0f}/100', help=a.get("action"))
+        bd[1].metric("펀더멘털 점수 (밸류/성장/재무)", "—" if fscore_top.get("score") is None else f'{fscore_top["score"]:.0f}/100', help=fscore_top.get("label"))
+        bd[2].metric("종합 (50:50 가중)", "—" if blended.get("score") is None else f'{blended["score"]:.0f}/100')
+        st.caption(
+            "위쪽 AI/Score/Rating은 이제 기술 점수와 펀더멘털 점수를 절반씩 반영한 종합 레이팅입니다. "
+            "하루 급락으로 기술 점수만 나빠져도, 실적·밸류에이션이 탄탄하면 종합 점수는 덜 흔들립니다."
+        )
 
     target_price = row.get("target_price")
     current_price = q.get("price")

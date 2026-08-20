@@ -65,6 +65,48 @@ def analyze(df):
     }
 
 
+def blended_rating(technical_score, fundamental_score, weight_technical: float = 0.5):
+    """Combine the technical (price-action) score with the fundamental score
+    into one 'real-world' rating that reflects both how the stock is trading
+    right now and how healthy the underlying business actually is.
+
+    A pure technical score marks any stock in a fresh sell-off as weak, even
+    if the drop was a one-day overreaction to a single soft metric inside an
+    otherwise strong earnings report. Blending in fundamentals stops a single
+    bad day from dominating the verdict, while still letting a real trend
+    change pull the rating down.
+
+    weight_technical: 0.0-1.0, how much weight the technical score gets.
+    The rest goes to the fundamental score. Defaults to an even 50/50 split.
+    """
+    weight_technical = max(0.0, min(1.0, weight_technical))
+    weight_fundamental = 1.0 - weight_technical
+
+    if technical_score is None and fundamental_score is None:
+        return {"score": None, "action": "NO DATA", "label": "NO DATA"}
+    if technical_score is None:
+        blended = fundamental_score
+    elif fundamental_score is None:
+        blended = technical_score
+    else:
+        blended = technical_score * weight_technical + fundamental_score * weight_fundamental
+
+    blended = max(0.0, min(100.0, blended))
+    action = (
+        "BUY / HOLD" if blended >= 72 else
+        "WATCH TO BUY" if blended >= 58 else
+        "WAIT" if blended >= 42 else
+        "REDUCE RISK"
+    )
+    label = (
+        "STRONG" if blended >= 72 else
+        "GOOD" if blended >= 58 else
+        "NEUTRAL" if blended >= 42 else
+        "WEAK"
+    )
+    return {"score": round(blended, 1), "action": action, "label": label}
+
+
 def market_brief(score, vix, ten, dollar):
     notes = []
     if score >= 70:
