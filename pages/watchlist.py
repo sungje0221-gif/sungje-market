@@ -70,6 +70,7 @@ def _detail(ticker: str, records: list[dict]) -> None:
     stats[3].metric("Rating", "—" if blended.get("score") is None else stars(blended["score"]))
     stats[4].metric("Target", money(row.get("target_price")))
     stats[5].metric("Earnings", "—" if days_to_earnings(ticker) is None else f'D{days_to_earnings(ticker):+d}')
+
     with st.expander("점수 구성 보기 (기술적 vs 펀더멘털)", expanded=False):
         bd = st.columns(3)
         bd[0].metric("기술 점수 (추세/RSI/MACD)", "—" if a.get("score") is None else f'{a["score"]:.0f}/100', help=a.get("action"))

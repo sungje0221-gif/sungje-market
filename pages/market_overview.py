@@ -158,17 +158,17 @@ def render() -> None:
         .market-hero-kicker,.market-section span{font-size:9px;letter-spacing:.17em;color:#718aa4;font-weight:900}
         .market-hero h1{font-size:30px;margin:3px 0 4px}.market-hero p{font-size:12px;color:#91a5bb;margin:0}
         .pulse-pill{white-space:nowrap;padding:9px 12px;border-radius:999px;font-size:10px;font-weight:900;letter-spacing:.12em;border:1px solid currentColor}
-        .pulse-pill.positive{color:#2fd39a;background:rgba(47,211,154,.08)}
-        .pulse-pill.negative{color:#ff6677;background:rgba(255,102,119,.08)}
+        .pulse-pill.positive{color:#4da3ff;background:rgba(77,163,255,.08)}
+        .pulse-pill.negative{color:#ff6474;background:rgba(255,100,116,.08)}
         .pulse-pill.neutral{color:#f3c969;background:rgba(243,201,105,.08)}
         .pulse-summary{margin-top:12px;padding-top:12px;border-top:1px solid rgba(148,163,184,.12);font-size:12px;color:#b7c5d5}
         .market-section{margin:24px 0 10px}.market-section h3{font-size:21px;margin:2px 0 0!important}
         .future-card{min-height:125px;padding:15px;border-radius:15px;background:linear-gradient(180deg,rgba(14,30,49,.98),rgba(7,18,31,.98));border:1px solid rgba(148,163,184,.14);border-top:2px solid #8fa2b8}
-        .future-card.up{border-top-color:#2fd39a}.future-card.down{border-top-color:#ff6677}
+        .future-card.up{border-top-color:#4da3ff}.future-card.down{border-top-color:#ff6474}
         .future-label{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#7f94aa;font-weight:800}
         .future-price{font-size:22px;font-weight:900;margin-top:9px;letter-spacing:-.035em;font-variant-numeric:tabular-nums}
         .future-change{font-size:12px;font-weight:900;margin-top:3px;color:#a9b4c4}
-        .future-card.up .future-change{color:#2fd39a}.future-card.down .future-change{color:#ff6677}
+        .future-card.up .future-change{color:#4da3ff}.future-card.down .future-change{color:#ff6474}
         .future-note{font-size:9px;color:#64798f;margin-top:9px}
         @media(max-width:900px){.market-hero-top{display:block}.pulse-pill{display:inline-block;margin-top:14px}.future-card{min-height:auto}}
         </style>

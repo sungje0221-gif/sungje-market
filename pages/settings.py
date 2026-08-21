@@ -26,7 +26,7 @@ DEFAULT = {
 def _backup_zip() -> bytes:
     memory = io.BytesIO()
     with zipfile.ZipFile(memory, "w", zipfile.ZIP_DEFLATED) as archive:
-        for name in ["portfolio.csv", "watchlist.json", "journal.csv", "settings.json"]:
+        for name in ["portfolio.csv", "watchlist.json", "journal.json", "settings.json"]:
             path = DATA_DIR / name
             if path.exists():
                 archive.write(path, arcname=f"data/{name}")
@@ -34,14 +34,20 @@ def _backup_zip() -> bytes:
 
 
 def _diagnostics() -> pd.DataFrame:
+    from utils.storage import cloud_configured
     checks = []
     for label, path in [
         ("Portfolio file", DATA_DIR / "portfolio.csv"),
         ("Watchlist file", DATA_DIR / "watchlist.json"),
-        ("Journal file", DATA_DIR / "journal.csv"),
+        ("Journal file", DATA_DIR / "journal.json"),
         ("Settings file", DATA_DIR / "settings.json"),
     ]:
         checks.append({"Check": label, "Status": "OK" if path.exists() else "MISSING", "Detail": str(path.name)})
+    checks.append({
+        "Check": "Cloud Sync (Supabase)",
+        "Status": "OK" if cloud_configured() else "NOT SET",
+        "Detail": "Watchlist/Portfolio/Journal survive restarts" if cloud_configured() else "로컬 파일만 사용 — 재부팅 시 소실 위험",
+    })
     checks.extend([
         {"Check": "Python", "Status": "OK", "Detail": sys.version.split()[0]},
         {"Check": "Platform", "Status": "OK", "Detail": platform.system()},
@@ -56,11 +62,15 @@ def render() -> None:
 
     status = connection_status()
     st.markdown("### Data Source Diagnostics")
-    c1, c2, c3 = st.columns(3)
+    c1, c2, c3, c4 = st.columns(4)
     c1.metric("Schwab Credentials", "READY" if status["configured"] else "NOT SET")
     c2.metric("Schwab Account", "CONNECTED" if status["connected"] else "DISCONNECTED")
     c3.metric("Quote Priority", "Schwab → Yahoo" if status["connected"] else "Yahoo Finance")
+    from engine.claude_advisor import configured as _ai_ready
+    c4.metric("AI Advisor", "READY" if _ai_ready() else "NOT SET")
     st.caption("Schwab 연결 전에는 Yahoo Finance가 기본 가격 공급원입니다. 시세는 지연될 수 있습니다.")
+    if not _ai_ready():
+        st.caption("AI 브리핑/코멘터리/채팅을 쓰려면 Streamlit Secrets에 [anthropic] api_key를 추가하세요.")
 
     x = load_json("settings.json", DEFAULT)
     st.markdown("### Personal Preferences")

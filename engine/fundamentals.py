@@ -88,6 +88,32 @@ def earnings_calendar(ticker: str) -> dict[str, Any]:
     return {}
 
 
+@st.cache_data(ttl=21600, show_spinner=False)
+def earnings_history(ticker: str, quarters: int = 6) -> pd.DataFrame:
+    """Past quarters' EPS estimate vs. actual and surprise %, most recent first."""
+    t = yf.Ticker(ticker)
+    try:
+        dates = t.get_earnings_dates(limit=max(quarters * 2, 8))
+    except Exception:
+        return pd.DataFrame()
+    if not isinstance(dates, pd.DataFrame) or dates.empty:
+        return pd.DataFrame()
+    reported_col = next((c for c in ["Reported EPS"] if c in dates.columns), None)
+    if not reported_col:
+        return pd.DataFrame()
+    past = dates[dates[reported_col].notna()].copy()
+    if past.empty:
+        return pd.DataFrame()
+    past = past.sort_index(ascending=False).head(quarters)
+    out = pd.DataFrame({
+        "Date": [idx.strftime("%Y-%m-%d") for idx in past.index],
+        "EPS Estimate": past.get("EPS Estimate"),
+        "Reported EPS": past.get(reported_col),
+        "Surprise %": past.get("Surprise(%)"),
+    })
+    return out.reset_index(drop=True)
+
+
 def next_earnings_date(ticker: str):
     calendar = earnings_calendar(ticker)
     value = calendar.get("Earnings Date")
