@@ -305,6 +305,14 @@ def render():
         with stats[4]: _stat_card("LEADER", best, "Top performer", "green")
         with stats[5]: _stat_card("LAGGARD", worst, "Weakest", "red")
 
+        with st.expander("🔧 디버그: 실제 Weight 값 (임시)", expanded=True):
+            if "Weight" in df.columns:
+                dbg = df[["Ticker", "Weight"]].sort_values("Weight", ascending=False)
+                st.caption(f"Weight 최소값: {dbg['Weight'].min():,.0f} · 최대값: {dbg['Weight'].max():,.0f} · 서로 다른 값 개수: {dbg['Weight'].nunique()}개 / 전체 {len(dbg)}개")
+                st.dataframe(dbg, use_container_width=True, hide_index=True, height=200)
+            else:
+                st.caption("Weight 컬럼 자체가 없습니다.")
+
         heatmap_fig = stock_heatmap(df, title)
         # Native Streamlit chart selection (Streamlit >=1.35) instead of the
         # third-party streamlit-plotly-events package. That package ships its
